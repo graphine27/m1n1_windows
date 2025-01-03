@@ -50,7 +50,7 @@ class HV(Reloadable):
         MAIR_EL1: MAIR_EL12,
         AMAIR_EL1: AMAIR_EL12,
         CONTEXTIDR_EL1: CONTEXTIDR_EL12,
-        ACTLR_EL1: ACTLR_EL12,
+        # ACTLR_EL1: ACTLR_EL12, # Handled in hv_exc.c, depends on CPU version
         AMX_CONFIG_EL1: AMX_CONFIG_EL12,
         SPRR_CONFIG_EL1: SPRR_CONFIG_EL12,
         SPRR_PPERM_EL1: SPRR_PPERM_EL12,
@@ -90,7 +90,7 @@ class HV(Reloadable):
         self.sym_offset = 0
         self.symbols = []
         self.symbol_dict = {}
-        self.sysreg = {0: {}}
+        self.sysreg = {}
         self.novm = False
         self._in_handler = False
         self._sigint_pending = False
@@ -1788,9 +1788,13 @@ class HV(Reloadable):
 
         self.map_vuart()
 
-        actlr = ACTLR(self.u.mrs(ACTLR_EL12))
+        # ACTLR depends on the CPU part
+        part = MIDR(self.u.mrs(MIDR_EL1)).PART
+        actlr_el12 = ACTLR_EL12 if part >= MIDR_PART.T8110_BLIZZARD else ACTLR_EL12_PRE
+
+        actlr = ACTLR(self.u.mrs(actlr_el12))
         actlr.EnMDSB = 1
-        self.u.msr(ACTLR_EL12, actlr.value)
+        self.u.msr(actlr_el12, actlr.value)
 
         self.setup_adt()
 
@@ -1905,10 +1909,12 @@ class HV(Reloadable):
             chip_id = self.u.adt["/chosen"].chip_id
             if chip_id in (0x8103, 0x6000, 0x6001, 0x6002):
                 cpu_start = 0x54000 + die * 0x20_0000_0000
-            elif chip_id in (0x8112,):
+            elif chip_id in (0x8112, 0x8122):
                 cpu_start = 0x34000 + die * 0x20_0000_0000
             elif chip_id in (0x6020, 0x6021, 0x6022):
                 cpu_start = 0x28000 + die * 0x20_0000_0000
+            elif chip_id in (0x6031,):
+                cpu_start = 0x88000 + die * 0x20_0000_0000
             else:
                 self.log("CPUSTART unknown for this SoC!")
                 break
@@ -1976,7 +1982,7 @@ class HV(Reloadable):
 
         if not self.smp:
             for cpu in list(self.adt["cpus"]):
-                if cpu.name != "cpu0":
+                if cpu.state != "running":
                     print(f"Removing ADT node {cpu._path}")
                     try:
                         del self.adt["cpus"][cpu.name]
@@ -2098,11 +2104,18 @@ class HV(Reloadable):
         if use_xnu_symbols == True:
             self.sym_offset = vmin - guest_base + self.tba.phys_base - self.tba.virt_base
 
-        self.iface.writemem(guest_base + self.bootargs_off, BootArgs.build(self.tba))
+        if self.tba.revision <= 1:
+            self.iface.writemem(guest_base + self.bootargs_off, BootArgs_r1.build(self.tba))
+        elif self.tba.revision == 2:
+            self.iface.writemem(guest_base + self.bootargs_off, BootArgs_r2.build(self.tba))
+        elif self.tba.revision == 3:
+            self.iface.writemem(guest_base + self.bootargs_off, BootArgs_r3.build(self.tba))
 
         print("Setting secondary CPU RVBARs...")
         rvbar = self.entry & ~0xfff
-        for cpu in self.adt["cpus"][1:]:
+        for cpu in self.adt["cpus"]:
+            if cpu.state == "running":
+                continue
             addr, size = cpu.cpu_impl_reg
             print(f"  {cpu.name}: [0x{addr:x}] = 0x{rvbar:x}")
             self.p.write64(addr, rvbar)
@@ -2252,7 +2265,11 @@ class HV(Reloadable):
         # Does not return
 
         self.started = True
-        self.started_cpus[0] = (0, 0, 0)
+        for cpu_node in list(self.adt["cpus"]):
+            if cpu_node.state == "running":
+                break
+        self.started_cpus[cpu_node.cpu_id] = (getattr(cpu_node, "die_id", 0), cpu_node.cluster_id, cpu_node.cpu_id)
+        self.sysreg[cpu_node.cpu_id] = {}
         self.p.hv_start(self.entry, self.guest_base + self.bootargs_off)
 
 from .. import trace

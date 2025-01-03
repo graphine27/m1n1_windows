@@ -17,7 +17,7 @@ parser.add_argument('boot_args', default=[], nargs="*")
 args = parser.parse_args()
 
 from m1n1.setup import *
-from m1n1.tgtypes import BootArgs
+from m1n1.tgtypes import BootArgs_r1, BootArgs_r2, BootArgs_r3
 from m1n1.macho import MachO
 from m1n1 import asm
 
@@ -85,7 +85,9 @@ for name in ("mtp", "aop"):
 print("Setting secondary CPU RVBARs...")
 
 rvbar = entry & ~0xfff
-for cpu in u.adt["cpus"][1:]:
+for cpu in u.adt["cpus"]:
+    if cpu.state == "running":
+        continue
     addr, size = cpu.cpu_impl_reg
     print(f"  {cpu.name}: [0x{addr:x}] = 0x{rvbar:x}")
     p.write64(addr, rvbar)
@@ -111,7 +113,12 @@ if args.xnu:
     tba.virt_base = 0xfffffe0010000000 + (tba.phys_base & (32 * 1024 * 1024 - 1))
     tba.devtree = u.ba.devtree - u.ba.virt_base + tba.virt_base
 
-iface.writemem(image_addr + bootargs_off, BootArgs.build(tba))
+if tba.revision <= 1:
+    iface.writemem(image_addr + bootargs_off, BootArgs_r1.build(tba))
+elif tba.revision == 2:
+    iface.writemem(image_addr + bootargs_off, BootArgs_r2.build(tba))
+elif tba.revision == 3:
+    iface.writemem(image_addr + bootargs_off, BootArgs_r3.build(tba))
 
 print(f"Copying stub...")
 

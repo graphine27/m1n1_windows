@@ -20,6 +20,8 @@
 
 // Target for device-specific debug builds
 //#define TARGET T8103
+// Some devices like Apple TV HD use other uarts for debug console
+//#define TARGET_BOARD 0x34
 
 // Enable SMMU abstraction layer to expose a fake SMMU to the guest which will redirect writes to the host IOMMU in a compatible manner
 // #define ENABLE_SMMU

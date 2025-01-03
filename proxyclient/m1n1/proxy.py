@@ -494,6 +494,7 @@ class M1N1Proxy(Reloadable):
     P_PUT_SIMD_STATE = 0x00f
     P_REBOOT = 0x010
     P_SLEEP = 0x011
+    P_EL3_CALL = 0x012
 
     P_WRITE64 = 0x100
     P_WRITE32 = 0x101
@@ -729,6 +730,10 @@ class M1N1Proxy(Reloadable):
                 self.request(self.P_CALL, addr, *args, reboot=True)
     def get_bootargs(self):
         return self.request(self.P_GET_BOOTARGS)
+    def get_bootargs_rev(self):
+        ba_addr = self.request(self.P_GET_BOOTARGS)
+        rev = self.read16(ba_addr)
+        return (ba_addr, rev)
     def get_base(self):
         return self.request(self.P_GET_BASE)
     def set_baud(self, baudrate):
@@ -769,6 +774,10 @@ class M1N1Proxy(Reloadable):
         self.request(self.P_REBOOT, no_reply=True)
     def sleep(self, deep=False):
         self.request(self.P_SLEEP, deep, no_reply=True)
+    def el3_call(self, addr, *args):
+        if len(args) > 4:
+            raise ValueError("Too many arguments")
+        return self.request(self.P_EL3_CALL, addr, *args)
 
     def write64(self, addr, data):
         '''write 8 byte value to given address'''
