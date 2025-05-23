@@ -13,6 +13,7 @@
 #include "firmware.h"
 #include "iodev.h"
 #include "isp.h"
+#include "kboot_atc.h"
 #include "malloc.h"
 #include "mcc.h"
 #include "memory.h"
@@ -35,6 +36,8 @@
 #define MAX_CIO_DEVS 8
 
 #define MAX_DISP_MAPPINGS 8
+
+#define MAX_MEM_REGIONS 32
 
 static void *dt = NULL;
 static int dt_bufsize = 0;
@@ -172,6 +175,82 @@ static int dt_set_rng_seed_adt(int node)
     return 0;
 }
 
+static int dt_set_fb(void)
+{
+    if (!cur_boot_args.video.base) {
+        printf("FDT: Framebuffer unavailable, skipping framebuffer initialization");
+        return 0;
+    }
+
+    int fb = fdt_path_offset(dt, "/chosen/framebuffer");
+
+    if (fb < 0) {
+        printf("FDT: No framebuffer found\n");
+        return 0;
+    }
+
+    u64 fb_base, fb_height;
+    get_notchless_fb(&fb_base, &fb_height);
+    u64 fb_size = cur_boot_args.video.stride * fb_height;
+    u64 fbreg[2] = {cpu_to_fdt64(fb_base), cpu_to_fdt64(fb_size)};
+    char fbname[32];
+
+    snprintf(fbname, sizeof(fbname), "framebuffer@%lx", fb_base);
+
+    if (fdt_setprop(dt, fb, "reg", fbreg, sizeof(fbreg)))
+        bail("FDT: couldn't set framebuffer.reg property\n");
+
+    if (fdt_set_name(dt, fb, fbname))
+        bail("FDT: couldn't set framebuffer name\n");
+
+    if (fdt_setprop_u32(dt, fb, "width", cur_boot_args.video.width))
+        bail("FDT: couldn't set framebuffer width\n");
+
+    if (fdt_setprop_u32(dt, fb, "height", fb_height))
+        bail("FDT: couldn't set framebuffer height\n");
+
+    if (fdt_setprop_u32(dt, fb, "stride", cur_boot_args.video.stride))
+        bail("FDT: couldn't set framebuffer stride\n");
+
+    const char *format = NULL;
+
+    switch (cur_boot_args.video.depth & 0xff) {
+        case 32:
+            format = "x8r8g8b8";
+            break;
+        case 30:
+            format = "x2r10g10b10";
+            break;
+        case 16:
+            format = "r5g6b5";
+            break;
+        default:
+            printf("FDT: unsupported fb depth %lu, not enabling\n", cur_boot_args.video.depth);
+            return 0; // Do not error out, but don't set the FB
+    }
+
+    if (fdt_setprop_string(dt, fb, "format", format))
+        bail("FDT: couldn't set framebuffer format\n");
+
+    fdt_delprop(dt, fb, "status"); // may fail if it does not exist
+
+    printf("FDT: %s base 0x%lx size 0x%lx\n", fbname, fb_base, fb_size);
+
+    // We do not need to reserve the framebuffer, as it will be excluded from the usable RAM
+    // range already.
+
+    // save notch height in the dcp node if present
+    if (cur_boot_args.video.height - fb_height) {
+        int dcp = fdt_path_offset(dt, "dcp");
+        if (dcp >= 0)
+            if (fdt_appendprop_u32(dt, dcp, "apple,notch-height",
+                                   cur_boot_args.video.height - fb_height))
+                printf("FDT: couldn't set apple,notch-height\n");
+    }
+
+    return 0;
+}
+
 static int dt_set_chosen(void)
 {
 
@@ -204,70 +283,9 @@ static int dt_set_chosen(void)
         printf("FDT: initrd at %p size 0x%lx\n", initrd_start, initrd_size);
     }
 
-    if (cur_boot_args.video.base) {
-        int fb = fdt_path_offset(dt, "/chosen/framebuffer");
-        if (fb < 0)
-            bail("FDT: /chosen node not found in devtree\n");
+    if (dt_set_fb())
+        return -1;
 
-        u64 fb_base, fb_height;
-        get_notchless_fb(&fb_base, &fb_height);
-        u64 fb_size = cur_boot_args.video.stride * fb_height;
-        u64 fbreg[2] = {cpu_to_fdt64(fb_base), cpu_to_fdt64(fb_size)};
-        char fbname[32];
-
-        snprintf(fbname, sizeof(fbname), "framebuffer@%lx", fb_base);
-
-        if (fdt_setprop(dt, fb, "reg", fbreg, sizeof(fbreg)))
-            bail("FDT: couldn't set framebuffer.reg property\n");
-
-        if (fdt_set_name(dt, fb, fbname))
-            bail("FDT: couldn't set framebuffer name\n");
-
-        if (fdt_setprop_u32(dt, fb, "width", cur_boot_args.video.width))
-            bail("FDT: couldn't set framebuffer width\n");
-
-        if (fdt_setprop_u32(dt, fb, "height", fb_height))
-            bail("FDT: couldn't set framebuffer height\n");
-
-        if (fdt_setprop_u32(dt, fb, "stride", cur_boot_args.video.stride))
-            bail("FDT: couldn't set framebuffer stride\n");
-
-        const char *format = NULL;
-
-        switch (cur_boot_args.video.depth & 0xff) {
-            case 32:
-                format = "x8r8g8b8";
-                break;
-            case 30:
-                format = "x2r10g10b10";
-                break;
-            case 16:
-                format = "r5g6b5";
-                break;
-            default:
-                printf("FDT: unsupported fb depth %lu, not enabling\n", cur_boot_args.video.depth);
-                return 0; // Do not error out, but don't set the FB
-        }
-
-        if (fdt_setprop_string(dt, fb, "format", format))
-            bail("FDT: couldn't set framebuffer format\n");
-
-        fdt_delprop(dt, fb, "status"); // may fail if it does not exist
-
-        printf("FDT: %s base 0x%lx size 0x%lx\n", fbname, fb_base, fb_size);
-
-        // We do not need to reserve the framebuffer, as it will be excluded from the usable RAM
-        // range already.
-
-        // save notch height in the dcp node if present
-        if (cur_boot_args.video.height - fb_height) {
-            int dcp = fdt_path_offset(dt, "dcp");
-            if (dcp >= 0)
-                if (fdt_appendprop_u32(dt, dcp, "apple,notch-height",
-                                       cur_boot_args.video.height - fb_height))
-                    printf("FDT: couldn't set apple,notch-height\n");
-        }
-    }
     node = fdt_path_offset(dt, "/chosen");
     if (node < 0)
         bail("FDT: /chosen node not found in devtree\n");
@@ -329,13 +347,75 @@ static int dt_set_memory(void)
     printf("FDT: DRAM at 0x%lx size 0x%lx\n", dram_base, dram_size);
     printf("FDT: Usable memory is 0x%lx..0x%lx (0x%lx)\n", dram_min, dram_max, dram_max - dram_min);
 
-    u64 memreg[2] = {cpu_to_fdt64(dram_min), cpu_to_fdt64(dram_max - dram_min)};
+    struct {
+        fdt64_t start;
+        fdt64_t size;
+    } memreg[MAX_MEM_REGIONS] = {{cpu_to_fdt64(dram_min), cpu_to_fdt64(dram_max - dram_min)}};
+    int num_regions = 1;
+
+    int resv_node = fdt_path_offset(dt, "/reserved-memory");
+    if (resv_node < 0) {
+        printf("FDT: '/reserved-memory' not found\n");
+    } else {
+        int node;
+
+        /* Find all reserved memory nodes */
+        fdt_for_each_subnode(node, dt, resv_node)
+        {
+            const char *name = fdt_get_name(dt, node, NULL);
+            const char *status = fdt_getprop(dt, node, "status", NULL);
+            if (status && !strcmp(status, "disabled"))
+                continue;
+
+            if (fdt_getprop(dt, node, "no-map", NULL))
+                continue;
+
+            const fdt64_t *reg = fdt_getprop(dt, node, "reg", NULL);
+            if (!reg)
+                continue;
+
+            u64 resv_start = fdt64_to_cpu(reg[0]);
+            u64 resv_len = fdt64_to_cpu(reg[1]);
+            u64 resv_end = resv_start + resv_len;
+
+            if (resv_start < dram_min) {
+                if (resv_end > dram_min) {
+                    bail("FDT: reserved-memory node %s intersects start of RAM (%lx..%lx "
+                         "%lx..%lx)\n",
+                         name, resv_start, resv_end, dram_min, dram_max);
+                }
+            } else if (resv_end > dram_max) {
+                if (resv_start < dram_max) {
+                    bail("FDT: reserved-memory node %s intersects end of RAM (%lx..%lx %lx..%lx)\n",
+                         name, resv_start, resv_end, dram_min, dram_max);
+                }
+            } else {
+                continue;
+            }
+
+            if ((resv_start | resv_len) & (get_page_size() - 1)) {
+                bail("FDT: reserved-memory node %s not page-aligned, ignoring (%lx..%lx)\n", name,
+                     resv_start, resv_end);
+                continue;
+            }
+
+            printf("FDT: Adding reserved-memory node %s (%lx..%lx) to RAM map\n", name, resv_start,
+                   resv_end);
+
+            if (num_regions >= MAX_MEM_REGIONS) {
+                bail("FDT: Out of memory regions for reserved-memory\n");
+            }
+
+            memreg[num_regions].start = cpu_to_fdt64(resv_start);
+            memreg[num_regions++].size = cpu_to_fdt64(resv_len);
+        }
+    }
 
     int node = fdt_path_offset(dt, "/memory");
     if (node < 0)
         bail("FDT: /memory node not found in devtree\n");
 
-    if (fdt_setprop(dt, node, "reg", memreg, sizeof(memreg)))
+    if (fdt_setprop(dt, node, "reg", memreg, sizeof(memreg[0]) * num_regions))
         bail("FDT: couldn't set memory.reg property\n");
 
     return 0;
@@ -586,6 +666,10 @@ static struct {
     },
     {
         .alias = "ethernet0",
+        .fdt_property = "local-mac-address",
+    },
+    {
+        .alias = "ethernet1",
         .fdt_property = "local-mac-address",
     },
     {
@@ -907,14 +991,6 @@ static int dt_set_uboot(void)
     return 0;
 }
 
-struct atc_tunable {
-    u32 offset : 24;
-    u32 size : 8;
-    u32 mask;
-    u32 value;
-} PACKED;
-static_assert(sizeof(struct atc_tunable) == 12, "Invalid atc_tunable size");
-
 struct adt_tunable_info {
     const char *adt_name;
     const char *fdt_name;
@@ -923,151 +999,7 @@ struct adt_tunable_info {
     bool required;
 };
 
-static const struct adt_tunable_info atc_tunables[] = {
-    /* global tunables applied after power on or reset */
-    {"tunable_ATC0AXI2AF", "apple,tunable-axi2af", 0x0, 0x4000, true},
-    {"tunable_ATC_FABRIC", "apple,tunable-common", 0x45000, 0x4000, true},
-    {"tunable_AUS_CMN_TOP", "apple,tunable-common", 0x800, 0x4000, true},
-    {"tunable_AUS_CMN_SHM", "apple,tunable-common", 0xa00, 0x4000, true},
-    {"tunable_AUSPLL_CORE", "apple,tunable-common", 0x2200, 0x4000, true},
-    {"tunable_AUSPLL_TOP", "apple,tunable-common", 0x2000, 0x4000, true},
-    {"tunable_CIO3PLL_CORE", "apple,tunable-common", 0x2a00, 0x4000, true},
-    {"tunable_CIO3PLL_TOP", "apple,tunable-common", 0x2800, 0x4000, true},
-    {"tunable_CIO_CIO3PLL_TOP", "apple,tunable-common", 0x2800, 0x4000, false},
-    {"tunable_USB_ACIOPHY_TOP", "apple,tunable-common", 0x0, 0x4000, true},
-    /* lane-specific tunables applied after a cable is connected */
-    {"tunable_DP_LN0_AUSPMA_TX_TOP", "apple,tunable-lane0-dp", 0xc000, 0x1000, true},
-    {"tunable_DP_LN1_AUSPMA_TX_TOP", "apple,tunable-lane1-dp", 0x13000, 0x1000, true},
-    {"tunable_USB_LN0_AUSPMA_RX_TOP", "apple,tunable-lane0-usb", 0x9000, 0x1000, true},
-    {"tunable_USB_LN0_AUSPMA_RX_EQ", "apple,tunable-lane0-usb", 0xa000, 0x1000, true},
-    {"tunable_USB_LN0_AUSPMA_RX_SHM", "apple,tunable-lane0-usb", 0xb000, 0x1000, true},
-    {"tunable_USB_LN0_AUSPMA_TX_TOP", "apple,tunable-lane0-usb", 0xc000, 0x1000, true},
-    {"tunable_USB_LN1_AUSPMA_RX_TOP", "apple,tunable-lane1-usb", 0x10000, 0x1000, true},
-    {"tunable_USB_LN1_AUSPMA_RX_EQ", "apple,tunable-lane1-usb", 0x11000, 0x1000, true},
-    {"tunable_USB_LN1_AUSPMA_RX_SHM", "apple,tunable-lane1-usb", 0x12000, 0x1000, true},
-    {"tunable_USB_LN1_AUSPMA_TX_TOP", "apple,tunable-lane1-usb", 0x13000, 0x1000, true},
-    {"tunable_CIO_LN0_AUSPMA_RX_TOP", "apple,tunable-lane0-cio", 0x9000, 0x1000, true},
-    {"tunable_CIO_LN0_AUSPMA_RX_EQ", "apple,tunable-lane0-cio", 0xa000, 0x1000, true},
-    {"tunable_CIO_LN0_AUSPMA_RX_SHM", "apple,tunable-lane0-cio", 0xb000, 0x1000, true},
-    {"tunable_CIO_LN0_AUSPMA_TX_TOP", "apple,tunable-lane0-cio", 0xc000, 0x1000, true},
-    {"tunable_CIO_LN1_AUSPMA_RX_TOP", "apple,tunable-lane1-cio", 0x10000, 0x1000, true},
-    {"tunable_CIO_LN1_AUSPMA_RX_EQ", "apple,tunable-lane1-cio", 0x11000, 0x1000, true},
-    {"tunable_CIO_LN1_AUSPMA_RX_SHM", "apple,tunable-lane1-cio", 0x12000, 0x1000, true},
-    {"tunable_CIO_LN1_AUSPMA_TX_TOP", "apple,tunable-lane1-cio", 0x13000, 0x1000, true},
-};
-
-static int dt_append_atc_tunable(int adt_node, int fdt_node,
-                                 const struct adt_tunable_info *tunable_info)
-{
-    u32 tunables_len;
-    const struct atc_tunable *tunable_adt =
-        adt_getprop(adt, adt_node, tunable_info->adt_name, &tunables_len);
-
-    if (!tunable_adt) {
-        printf("ADT: tunable %s not found\n", tunable_info->adt_name);
-
-        if (tunable_info->required)
-            return -1;
-        else
-            return 0;
-    }
-
-    if (tunables_len % sizeof(*tunable_adt)) {
-        printf("ADT: tunable %s with invalid length %d\n", tunable_info->adt_name, tunables_len);
-        return -1;
-    }
-
-    u32 n_tunables = tunables_len / sizeof(*tunable_adt);
-    for (size_t j = 0; j < n_tunables; j++) {
-        const struct atc_tunable *tunable = &tunable_adt[j];
-
-        if (tunable->size != 32) {
-            printf("kboot: ATC tunable has invalid size %d\n", tunable->size);
-            return -1;
-        }
-
-        if (tunable->offset % (tunable->size / 8)) {
-            printf("kboot: ATC tunable has unaligned offset %x\n", tunable->offset);
-            return -1;
-        }
-
-        if (tunable->offset + (tunable->size / 8) > tunable_info->reg_size) {
-            printf("kboot: ATC tunable has invalid offset %x\n", tunable->offset);
-            return -1;
-        }
-
-        if (fdt_appendprop_u32(dt, fdt_node, tunable_info->fdt_name,
-                               tunable->offset + tunable_info->reg_offset) < 0)
-            return -1;
-        if (fdt_appendprop_u32(dt, fdt_node, tunable_info->fdt_name, tunable->mask) < 0)
-            return -1;
-        if (fdt_appendprop_u32(dt, fdt_node, tunable_info->fdt_name, tunable->value) < 0)
-            return -1;
-    }
-
-    return 0;
-}
-
-static void dt_copy_atc_tunables(const char *adt_path, const char *dt_alias)
-{
-    int ret;
-
-    int adt_node = adt_path_offset(adt, adt_path);
-    if (adt_node < 0)
-        return;
-
-    const char *fdt_path = fdt_get_alias(dt, dt_alias);
-    if (fdt_path == NULL) {
-        printf("FDT: Unable to find alias %s\n", dt_alias);
-        return;
-    }
-
-    int fdt_node = fdt_path_offset(dt, fdt_path);
-    if (fdt_node < 0) {
-        printf("FDT: Unable to find path %s for alias %s\n", fdt_path, dt_alias);
-        return;
-    }
-
-    for (size_t i = 0; i < sizeof(atc_tunables) / sizeof(*atc_tunables); ++i) {
-        ret = dt_append_atc_tunable(adt_node, fdt_node, &atc_tunables[i]);
-        if (ret)
-            goto cleanup;
-    }
-
-    return;
-
-cleanup:
-    /*
-     * USB3 and Thunderbolt won't work if something went wrong. Clean up to make
-     * sure we don't leave half-filled properties around so that we can at least
-     * try to boot with USB2 support only.
-     */
-    for (size_t i = 0; i < sizeof(atc_tunables) / sizeof(*atc_tunables); ++i)
-        fdt_delprop(dt, fdt_node, atc_tunables[i].fdt_name);
-
-    printf("FDT: Unable to setup ATC tunables for %s - USB3/Thunderbolt will not work\n", adt_path);
-}
-
-static int dt_set_atc_tunables(void)
-{
-    char adt_path[32];
-    char fdt_alias[32];
-
-    for (int i = 0; i < MAX_ATC_DEVS; ++i) {
-        memset(adt_path, 0, sizeof(adt_path));
-        snprintf(adt_path, sizeof(adt_path), "/arm-io/atc-phy%d", i);
-
-        memset(fdt_alias, 0, sizeof(adt_path));
-        snprintf(fdt_alias, sizeof(fdt_alias), "atcphy%d", i);
-
-        dt_copy_atc_tunables(adt_path, fdt_alias);
-    }
-
-    return 0;
-}
-
-static const struct adt_tunable_info acio_tunables[] = {
-    /* NHI tunables */
+static const struct adt_tunable_info usb4_nhi_tunables[] = {
     {"hi_up_tx_desc_fabric_tunables", "apple,tunable-nhi", 0xf0000, 0x4000, true},
     {"hi_up_tx_data_fabric_tunables", "apple,tunable-nhi", 0xec000, 0x4000, true},
     {"hi_up_rx_desc_fabric_tunables", "apple,tunable-nhi", 0xe8000, 0x4000, true},
@@ -1075,11 +1007,15 @@ static const struct adt_tunable_info acio_tunables[] = {
     {"hi_up_merge_fabric_tunables", "apple,tunable-nhi", 0xf8000, 0x4000, true},
     {"hi_dn_merge_fabric_tunables", "apple,tunable-nhi", 0xfc000, 0x4000, true},
     {"fw_int_ctl_management_tunables", "apple,tunable-nhi", 0x4000, 0x4000, true},
-    /* M3 tunables */
-    {"top_tunables", "apple,tunable-m3", 0x0, 0x4000, true},
-    {"hbw_fabric_tunables", "apple,tunable-m3", 0x4000, 0x4000, true},
-    {"lbw_fabric_tunables", "apple,tunable-m3", 0x8000, 0x4000, true},
-    /* PCIe adapter tunables */
+};
+
+static const struct adt_tunable_info usb4_rc_tunables[] = {
+    {"top_tunables", "apple,tunable-rc", 0x0, 0x4000, true},
+    {"hbw_fabric_tunables", "apple,tunable-rc", 0x4000, 0x4000, true},
+    {"lbw_fabric_tunables", "apple,tunable-rc", 0x8000, 0x4000, true},
+};
+
+static const struct adt_tunable_info usb4_pcie_adapter_tunables[] = {
     {"pcie_adapter_regs_tunables", "apple,tunable-pcie-adapter", 0x0, 0x4000, true},
 };
 
@@ -1148,9 +1084,8 @@ static int dt_append_acio_tunable(int adt_node, int fdt_node,
     return 0;
 }
 
-static int dt_copy_acio_tunables(const char *adt_path, const char *dt_alias)
+static int dt_copy_usb4_drom(const char *adt_path, const char *dt_alias)
 {
-    int ret;
     int adt_node = adt_path_offset(adt, adt_path);
     if (adt_node < 0)
         return -1;
@@ -1168,20 +1103,36 @@ static int dt_copy_acio_tunables(const char *adt_path, const char *dt_alias)
     if (!drom_blob || !drom_len)
         bail("ADT: Failed to get thunderbolt-drom\n");
 
-    fdt_setprop(dt, fdt_node, "apple,thunderbolt-drom", drom_blob, drom_len);
-    for (size_t i = 0; i < sizeof(acio_tunables) / sizeof(*acio_tunables); ++i) {
-        ret = dt_append_acio_tunable(adt_node, fdt_node, &acio_tunables[i]);
+    return fdt_setprop(dt, fdt_node, "apple,thunderbolt-drom", drom_blob, drom_len);
+}
+
+static int dt_copy_acio_tunables(const char *adt_path, const char *dt_alias,
+                                 const struct adt_tunable_info *tunables, size_t n_tunables)
+{
+    int ret;
+    int adt_node = adt_path_offset(adt, adt_path);
+    if (adt_node < 0)
+        return -1;
+
+    const char *fdt_path = fdt_get_alias(dt, dt_alias);
+    if (fdt_path == NULL)
+        bail("FDT: Unable to find alias %s\n", dt_alias);
+
+    int fdt_node = fdt_path_offset(dt, fdt_path);
+    if (fdt_node < 0)
+        bail("FDT: Unable to find path %s for alias %s\n", fdt_path, dt_alias);
+
+    for (size_t i = 0; i < n_tunables; ++i) {
+        ret = dt_append_acio_tunable(adt_node, fdt_node, &tunables[i]);
         if (ret)
-            bail_cleanup("ADT: unable to convert '%s' tunable\n", acio_tunables[i].adt_name);
+            bail_cleanup("ADT: unable to convert '%s' tunable", tunables[i].adt_name);
     }
 
     return 0;
 
 err:
-    fdt_delprop(dt, fdt_node, "apple,thunderbolt-drom");
-    fdt_delprop(dt, fdt_node, "apple,tunable-nhi");
-    fdt_delprop(dt, fdt_node, "apple,tunable-m3");
-    fdt_delprop(dt, fdt_node, "apple,tunable-pcie-adapter");
+    for (size_t i = 0; i < n_tunables; ++i)
+        fdt_delprop(dt, fdt_node, tunables[i].fdt_name);
 
     return -1;
 }
@@ -1195,10 +1146,93 @@ static int dt_set_acio_tunables(void)
         memset(adt_path, 0, sizeof(adt_path));
         snprintf(adt_path, sizeof(adt_path), "/arm-io/acio%d", i);
 
-        memset(fdt_alias, 0, sizeof(adt_path));
-        snprintf(fdt_alias, sizeof(fdt_alias), "acio%d", i);
+        memset(fdt_alias, 0, sizeof(fdt_alias));
+        snprintf(fdt_alias, sizeof(fdt_alias), "usb4_%d_rc", i);
+        dt_copy_acio_tunables(adt_path, fdt_alias, usb4_rc_tunables,
+                              sizeof(usb4_rc_tunables) / sizeof(*usb4_rc_tunables));
 
-        dt_copy_acio_tunables(adt_path, fdt_alias);
+        memset(fdt_alias, 0, sizeof(fdt_alias));
+        snprintf(fdt_alias, sizeof(fdt_alias), "usb4_%d_pcie_adapter", i);
+        dt_copy_acio_tunables(adt_path, fdt_alias, usb4_pcie_adapter_tunables,
+                              sizeof(usb4_pcie_adapter_tunables) /
+                                  sizeof(*usb4_pcie_adapter_tunables));
+
+        memset(fdt_alias, 0, sizeof(fdt_alias));
+        snprintf(fdt_alias, sizeof(fdt_alias), "usb4_%d_nhi", i);
+        dt_copy_acio_tunables(adt_path, fdt_alias, usb4_nhi_tunables,
+                              sizeof(usb4_nhi_tunables) / sizeof(*usb4_nhi_tunables));
+        dt_copy_usb4_drom(adt_path, fdt_alias);
+    }
+
+    return 0;
+}
+
+static const struct adt_tunable_info pciec_tunables[] = {
+    {"atc-apcie-debug-tunables", "apple,tunable-debug", 0, 0x2000, true},
+    {"atc-apcie-fabric-tunables", "apple,tunable-fabric", 0, 0x4000, true},
+    {"atc-apcie-rc-tunables", "apple,tunable-rc", 0, 0x4000, true},
+};
+static const struct adt_tunable_info pciec_port_tunable = {
+    .adt_name = "apcie-config-tunables",
+    .fdt_name = "apple,tunable",
+    .reg_offset = 0,
+    .reg_size = 0x4000,
+    .required = true,
+};
+
+static int dt_copy_pciec_tunables(const char *adt_path, const char *dt_alias)
+{
+    int ret;
+    int adt_node = adt_path_offset(adt, adt_path);
+
+    if (adt_node < 0)
+        return -1;
+
+    const char *fdt_path = fdt_get_alias(dt, dt_alias);
+    if (fdt_path == NULL)
+        bail("FDT: Unable to find alias %s\n", dt_alias);
+
+    int fdt_node = fdt_path_offset(dt, fdt_path);
+    if (fdt_node < 0)
+        bail("FDT: Unable to find path %s for alias %s\n", fdt_path, dt_alias);
+
+    int fdt_port_node = fdt_first_subnode(dt, fdt_node);
+    if (fdt_port_node < 0)
+        bail("FDT: Unable to find port node for %s\n", fdt_path);
+
+    ret = dt_append_acio_tunable(adt_node, fdt_port_node, &pciec_port_tunable);
+    if (ret)
+        bail_cleanup("PCIEC: unable to convert '%s' tunable", pciec_tunables[0].adt_name);
+
+    for (size_t i = 0; i < sizeof(pciec_tunables) / sizeof(*pciec_tunables); ++i) {
+        ret = dt_append_acio_tunable(adt_node, fdt_node, &pciec_tunables[i]);
+        if (ret)
+            bail_cleanup("PCIEC: unable to convert '%s' tunable", pciec_tunables[i].adt_name);
+    }
+
+    return 0;
+
+err:
+    for (size_t i = 0; i < sizeof(pciec_tunables) / sizeof(*pciec_tunables); ++i)
+        fdt_delprop(dt, fdt_node, pciec_tunables[i].fdt_name);
+    fdt_delprop(dt, fdt_port_node, pciec_port_tunable.fdt_name);
+
+    return -1;
+}
+
+static int dt_set_pcie_tunables(void)
+{
+    char adt_path[32];
+    char fdt_alias[32];
+
+    for (int i = 0; i < MAX_CIO_DEVS; ++i) {
+        memset(adt_path, 0, sizeof(adt_path));
+        snprintf(adt_path, sizeof(adt_path), "/arm-io/apciec%d", i);
+
+        memset(fdt_alias, 0, sizeof(adt_path));
+        snprintf(fdt_alias, sizeof(fdt_alias), "usb4_%d_pcie", i);
+
+        dt_copy_pciec_tunables(adt_path, fdt_alias);
     }
 
     return 0;
@@ -1803,7 +1837,7 @@ static int dt_set_display(void)
     dart_lock_adt("/arm-io/dart-disp0", 0);
 
     /* Add "/reserved-memory" nodes with iommu mapping and link them to their
-     * devices. The memory is already excluded from useable RAM so these nodes
+     * devices. The memory is already excluded from usable RAM so these nodes
      * are only required to inform the OS about the existing mappings.
      * Required for disp0, dcp and all dcpext.
      * Checks for dcp* / disp*_piodma / disp* aliases and fails silently if
@@ -1873,7 +1907,10 @@ static int dt_set_display(void)
 
     const display_config_t *disp_cfg = display_get_config();
 
-    return dt_vram_reserved_region(disp_cfg->dcp_alias, "disp0");
+    if (disp_cfg)
+        return dt_vram_reserved_region(disp_cfg->dcp_alias, "disp0");
+    else
+        return dt_vram_reserved_region("dcp", "disp0");
 }
 
 static int dt_set_sep(void)
@@ -2100,7 +2137,7 @@ static int dt_disable_missing_devs(const char *adt_prefix, const char *dt_prefix
 
     int acnt = 0, phcnt = 0;
     u64 *addrs = calloc(max_devs, sizeof(u64));
-    u32 *phandles = calloc(max_devs * 4, sizeof(u32)); // Allow up to 4 extra nodes per device
+    u32 *phandles = calloc(max_devs * 5, sizeof(u32)); // Allow up to 5 extra nodes per device
     if (!addrs || !phandles)
         bail_cleanup("FDT: out of memory\n");
 
@@ -2200,6 +2237,18 @@ static int dt_disable_missing_devs(const char *adt_prefix, const char *dt_prefix
                 }
             }
 
+            int port = fdt_subnode_offset(dt, node, "port");
+            if (port >= 0) {
+                int endpoint = fdt_subnode_offset(dt, port, "endpoint");
+                if (endpoint >= 0) {
+                    const fdt32_t *remote_endpoint =
+                        fdt_getprop(dt, endpoint, "remote-endpoint", NULL);
+                    if (remote_endpoint) {
+                        phandles[phcnt++] = fdt32_ld(remote_endpoint);
+                    }
+                }
+            }
+
             const char *status = fdt_getprop(dt, node, "status", NULL);
             if (!status || strcmp(status, "disabled")) {
                 printf("FDT: Disabling missing device %s/%s\n", path, name);
@@ -2214,22 +2263,65 @@ static int dt_disable_missing_devs(const char *adt_prefix, const char *dt_prefix
         {
             const char *name = fdt_get_name(dt, node, NULL);
             u32 phandle = fdt_get_phandle(dt, node);
+            if (!phandle)
+                continue;
 
             for (int i = 0; i < phcnt; i++) {
                 if (phandles[i] != phandle)
                     continue;
 
+                phandles[i] = 0;
+
                 const char *status = fdt_getprop(dt, node, "status", NULL);
                 if (status && !strcmp(status, "disabled"))
                     continue;
 
-                printf("FDT: Disabling secondary device %s/%s\n", path, name);
+                printf("FDT: Disabling secondary device %s/%s (%d)\n", path, name, phandle);
 
                 if (fdt_setprop_string(dt, node, "status", "disabled") < 0)
                     bail_cleanup("FDT: failed to set status property of %s/%s\n", path, name);
-                break;
             }
         }
+    }
+
+    for (int i = 0; i < phcnt; i++) {
+        if (!phandles[i])
+            continue;
+
+        int node = fdt_node_offset_by_phandle(dt, phandles[i]);
+        if (node < 0)
+            bail_cleanup("FDT: failed to find secondary phandle %d\n", phandles[i]);
+
+        const char *name = fdt_get_name(dt, node, NULL);
+
+        // Should be usb-pd/connector/ports/port/endpoint
+        if (!strcmp(name, "endpoint")) {
+            for (int i = 0; i < 4; i++)
+                if (node >= 0)
+                    node = fdt_parent_offset(dt, node);
+            if (node < 0) {
+                printf("FDT: failed to walk up from endpoint phandle %d\n", phandles[i]);
+                continue;
+            }
+            name = fdt_get_name(dt, node, NULL);
+            if (strncmp(name, "usb-pd", 6)) {
+                printf("FDT: unexpected secondary device %s walking up from endpoint\n", name);
+                continue;
+            }
+        } else {
+            printf("FDT: unexpected secondary device %s (%d)\n", name, phandles[i]);
+            continue;
+        }
+
+        const char *status = fdt_getprop(dt, node, "status", NULL);
+        if (status && !strcmp(status, "disabled"))
+            continue;
+
+        printf("FDT: Disabling secondary device %s\n", name);
+
+        if (fdt_setprop_string(dt, node, "status", "disabled") < 0)
+            bail_cleanup("FDT: failed to set status property of %s\n", name);
+        break;
     }
 
     ret = 0;
@@ -2306,6 +2398,43 @@ static int dt_transfer_virtios(void)
         if (fdt_setprop(dt, fnode, "interrupts", intprop, 4 * intcells))
             bail("FDT: couldn't set %s.interrupts\n", fullname);
     }
+
+    return 0;
+}
+
+/*
+ * Remove unneeded apple,always-on from unused memory channels on T8012.
+ * This is needed because the amount of memory and the amount of used
+ * memory channels depends on the storage configuration of the host Mac
+ * and can only be determined at runtime.
+ */
+static int dt_set_pmgr(void)
+{
+    if (chip_id != T8012)
+        return 0;
+
+    if (mem_size_actual > 0x40000000)
+        return 0;
+
+    int pmgr_node = fdt_path_offset(dt, "/soc/power-management@20e000000");
+    if (pmgr_node < 0) {
+        printf("FDT: Failed to find pmgr node\n");
+        return 0;
+    }
+
+    int dcs2_node = fdt_path_offset(dt, "/soc/power-management@20e000000/power-controller@80258");
+    if (dcs2_node < 0)
+        bail("FDT: failed to find ps_dcs2 node\n");
+
+    /* Allow failure */
+    fdt_delprop(dt, dcs2_node, "apple,always-on");
+
+    int dcs3_node = fdt_path_offset(dt, "/soc/power-management@20e000000/power-controller@80260");
+    if (dcs3_node < 0)
+        bail("FDT: failed to find ps_dcs3 node\n");
+
+    /* Allow failure */
+    fdt_delprop(dt, dcs3_node, "apple,always-on");
 
     return 0;
 }
@@ -2440,7 +2569,7 @@ int kboot_prepare_dt(void *fdt)
     dt_bufsize = fdt_totalsize(fdt);
     assert(dt_bufsize);
 
-    dt_bufsize += 64 * 1024; // Add 64K of buffer for modifications
+    dt_bufsize += 6 * SZ_16K; // Add 96K of buffer for modifications
     dt = memalign(DT_ALIGN, dt_bufsize);
 
     if (fdt_open_into(fdt, dt, dt_bufsize) < 0)
@@ -2452,7 +2581,7 @@ int kboot_prepare_dt(void *fdt)
     if (fdt_add_mem_rsv(dt, (u64)_base, ((u64)_end) - ((u64)_base)))
         bail("FDT: couldn't add reservation for m1n1\n");
 
-    /* setup console log buffer early to cpature as much log as possible */
+    /* setup console log buffer early to capture as much log as possible */
     dt_setup_mtd_phram();
 
     if (dt_set_chosen())
@@ -2469,9 +2598,11 @@ int kboot_prepare_dt(void *fdt)
         return -1;
     if (dt_set_uboot())
         return -1;
-    if (dt_set_atc_tunables())
+    if (kboot_setup_atc(dt))
         return -1;
     if (dt_set_acio_tunables())
+        return -1;
+    if (dt_set_pcie_tunables())
         return -1;
     if (dt_set_display())
         return -1;
@@ -2495,6 +2626,8 @@ int kboot_prepare_dt(void *fdt)
         return -1;
     if (dt_set_isp_fwdata())
         return -1;
+    if (dt_set_pmgr())
+        return -1;
 #ifndef RELEASE
     if (dt_transfer_virtios())
         return 1;
@@ -2510,6 +2643,10 @@ int kboot_prepare_dt(void *fdt)
 
     if (fdt_pack(dt))
         bail("FDT: fdt_pack() failed\n");
+
+    u32 dt_remain = dt_bufsize - fdt_totalsize(dt);
+    if (dt_remain < SZ_16K)
+        printf("FDT: free dt buffer space low, %u bytes left\n", dt_remain);
 
     printf("FDT prepared at %p\n", dt);
 

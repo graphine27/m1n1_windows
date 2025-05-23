@@ -454,6 +454,18 @@ static inline int poll32(u64 addr, u32 mask, u32 target, u32 timeout)
     return -1;
 }
 
+static inline int poll64(u64 addr, u64 mask, u64 target, u32 timeout)
+{
+    while (--timeout > 0) {
+        u32 value = read64(addr) & mask;
+        if (value == target)
+            return 0;
+        udelay(1);
+    }
+
+    return -1;
+}
+
 typedef u64(generic_func)(u64, u64, u64, u64, u64);
 
 struct vector_args {
@@ -464,7 +476,7 @@ struct vector_args {
 
 extern u32 board_id, chip_id;
 
-extern bool is_mac, has_dcp;
+extern bool is_mac;
 extern bool cpufeat_actlr_el2, cpufeat_fast_ipi, cpufeat_mmu_sprr;
 extern bool cpufeat_global_sleep, cpufeat_workaround_cyclone_cache;
 

@@ -19,7 +19,7 @@ jobs:
 
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: install nightly rust
         run: |
@@ -36,6 +36,7 @@ jobs:
 
       - name: Run format-check
         run: |
+          . "$HOME/.cargo/env"
           make format CLANG_FORMAT=clang-format-18
           git diff
           git reset --hard

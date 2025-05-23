@@ -192,7 +192,7 @@ static void smp_stop_cpu(int index, int die, int cluster, int core, u64 impl, u6
 
     u64 dsleep = deep_sleep;
     // Put the CPU to sleep
-    smp_call2(index, cpu_sleep, dsleep, cpufeat_global_sleep);
+    smp_call1(index, cpu_sleep, dsleep);
 
     // If going into deep sleep, powering off the last core in a cluster kills our register
     // access, so just wait a bit.
@@ -278,6 +278,9 @@ void smp_start_secondaries(void)
         case T6021:
         case T6022:
             cpu_start_off = CPU_START_OFF_T6020;
+            break;
+        case T6030:
+            cpu_start_off = CPU_START_OFF_T8112;
             break;
         case T6031:
         case T6034:

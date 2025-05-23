@@ -1909,7 +1909,7 @@ class HV(Reloadable):
             chip_id = self.u.adt["/chosen"].chip_id
             if chip_id in (0x8103, 0x6000, 0x6001, 0x6002):
                 cpu_start = 0x54000 + die * 0x20_0000_0000
-            elif chip_id in (0x8112, 0x8122):
+            elif chip_id in (0x8112, 0x8122, 0x6030):
                 cpu_start = 0x34000 + die * 0x20_0000_0000
             elif chip_id in (0x6020, 0x6021, 0x6022):
                 cpu_start = 0x28000 + die * 0x20_0000_0000
@@ -1959,6 +1959,7 @@ class HV(Reloadable):
                            "/arm-io/dart-apciec%d",
                            "/arm-io/apciec%d-piodma",
                            "/arm-io/i2c0/hpmBusManager/hpm%d",
+                           "/arm-io/nub-spmi-a0/hpm%d",
                            "/arm-io/atc%d-dpxbar",
                            "/arm-io/atc%d-dpphy",
                            "/arm-io/atc%d-dpin0",
@@ -2083,15 +2084,23 @@ class HV(Reloadable):
         if hasattr(self.u.adt["chosen"]["memory-map"], "Kernel_mach__header"):
             self.adt["chosen"]["memory-map"].Kernel_mach__header = (guest_base, 0)
 
-        for name in ("mtp", "aop"):
-            if name in self.adt["/arm-io"]:
-                iop = self.adt[f"/arm-io/{name}"]
-                nub = self.adt[f"/arm-io/{name}/iop-{name}-nub"]
-                if iop.segment_names.endswith(";__OS_LOG"):
-                    iop.segment_names = iop.segment_names[:-9]
-                    nub.segment_names = nub.segment_names[:-9]
-                    iop.segment_ranges = iop.segment_ranges[:-32]
-                    nub.segment_ranges = nub.segment_ranges[:-32]
+        def remove_oslog(node):
+            names = node.segment_names.split(";")
+            try:
+                idx = names.index("__OS_LOG")
+            except ValueError:
+                return
+            print(f"Removing __OS_LOG from {node.name}")
+            names = names[:idx] + names[idx + 1:]
+            node.segment_names = ";".join(names)
+            node.segment_ranges = node.segment_ranges[:idx * 32] + node.segment_ranges[32 + idx * 32: ]
+
+        for node in self.adt["/arm-io"]:
+            if hasattr(node, "segment_names"):
+                remove_oslog(node)
+            for nub in node:
+                if hasattr(nub, "segment_names"):
+                    remove_oslog(nub)
 
         print(f"Setting up bootargs at 0x{guest_base + self.bootargs_off:x}...")
 

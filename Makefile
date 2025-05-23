@@ -3,10 +3,12 @@ RUSTARCH ?= aarch64-unknown-none-softfloat
 ifeq ($(shell uname),Darwin)
 USE_CLANG ?= 1
 $(info INFO: Building on Darwin)
-ifeq ($(shell uname -p),arm)
-TOOLCHAIN ?= /opt/homebrew/opt/llvm/bin/
+BREW ?= $(shell command -v brew)
+TOOLCHAIN ?= $(shell $(BREW) --prefix llvm)/bin/
+ifeq ($(shell ls $(TOOLCHAIN)/ld.lld 2>/dev/null),)
+LLDDIR ?= $(shell $(BREW) --prefix lld)/bin/
 else
-TOOLCHAIN ?= /usr/local/opt/llvm/bin/
+LLDDIR ?= $(TOOLCHAIN)
 endif
 $(info INFO: Toolchain path: $(TOOLCHAIN))
 endif
@@ -17,10 +19,14 @@ else
 ARCH ?= aarch64-linux-gnu-
 endif
 
+ifneq ($(TOOLCHAIN),$(LLDDIR))
+$(info INFO: LLD path: $(LLDDIR))
+endif
+
 ifeq ($(USE_CLANG),1)
 CC := $(TOOLCHAIN)clang --target=$(ARCH)
 AS := $(TOOLCHAIN)clang --target=$(ARCH)
-LD := $(TOOLCHAIN)ld.lld
+LD := $(LLDDIR)ld.lld
 OBJCOPY := $(TOOLCHAIN)llvm-objcopy
 CLANG_FORMAT ?= $(TOOLCHAIN)clang-format
 EXTRA_CFLAGS ?=
@@ -95,7 +101,7 @@ OBJECTS := \
 	afk.o \
 	aic.o \
 	asc.o \
-	bootlogo_128.o bootlogo_256.o \
+	bootlogo_48.o bootlogo_128.o bootlogo_256.o \
 	chainload.o \
 	chainload_asm.o \
 	chickens.o \
@@ -127,8 +133,9 @@ OBJECTS := \
 	iodev.o \
 	iova.o \
 	isp.o \
-	kboot.o \
+	kboot.o kboot_atc.o \
 	main.o \
+	mitigations.o \
 	mcc.o \
 	memory.o memory_asm.o \
 	nvme.o \
@@ -173,10 +180,10 @@ TARGET_RAW := m1n1.bin
 
 DEPDIR := build/.deps
 
-.PHONY: all clean format update_tag update_cfg invoke_cc
-all: update_tag update_cfg build/$(TARGET) build/$(TARGET_RAW)
+.PHONY: all clean format invoke_cc always_rebuild
+all: build/$(TARGET) build/$(TARGET_RAW)
 clean:
-	rm -rf build/*
+	rm -rf build/* build/.deps
 format:
 	$(CLANG_FORMAT) -i src/*.c src/dcp/*.c src/math/*.c src/*.h src/dcp/*.h src/math/*.h sysinc/*.h
 format-check:
@@ -205,7 +212,7 @@ $(BUILD_FP_OBJS): build/%.o: src/%.c
 	$(QUIET)mkdir -p "$(dir $@)"
 	$(QUIET)$(CC) -c $(BASE_CFLAGS) -MMD -MF $(DEPDIR)/$(*F).d -MQ "$@" -MP -o $@ $<
 
-build/%.o: src/%.c
+build/%.o: src/%.c build-tag build-cfg
 	$(QUIET)echo "  CC    $@"
 	$(QUIET)mkdir -p $(DEPDIR)
 	$(QUIET)mkdir -p "$(dir $@)"
@@ -227,24 +234,33 @@ build/$(NAME).macho: build/$(NAME).elf
 	$(QUIET)echo "  MACHO $@"
 	$(QUIET)$(OBJCOPY) -O binary --strip-debug $< $@
 
+ifeq ($(LOGO),)
 build/$(NAME).bin: build/$(NAME)-raw.elf
 	$(QUIET)echo "  RAW   $@"
 	$(QUIET)$(OBJCOPY) -O binary --strip-debug $< $@
 
-update_tag:
+else
+build/$(NAME)-asahi.bin: build/$(NAME)-raw.elf
+	$(QUIET)echo "  RAW   $@"
+	$(QUIET)$(OBJCOPY) -O binary --strip-debug $< $@
+
+build/$(NAME).bin: build/$(NAME)-asahi.bin build/$(LOGO).logo
+	$(QUIET)echo "  RAW   $@"
+	$(QUIET)cat $^ > $@
+endif
+
+.INTERMEDIATE: build-tag build-cfg
+build-tag src/../build/build_tag.h &:
 	$(QUIET)mkdir -p build
 	$(QUIET)./version.sh > build/build_tag.tmp
 	$(QUIET)cmp -s build/build_tag.h build/build_tag.tmp 2>/dev/null || \
 	( mv -f build/build_tag.tmp build/build_tag.h && echo "  TAG   build/build_tag.h" )
 
-update_cfg:
+build-cfg src/../build/build_cfg.h &:
 	$(QUIET)mkdir -p build
 	$(QUIET)for i in $(CFG); do echo "#define $$i"; done > build/build_cfg.tmp
 	$(QUIET)cmp -s build/build_cfg.h build/build_cfg.tmp 2>/dev/null || \
 	( mv -f build/build_cfg.tmp build/build_cfg.h && echo "  CFG   build/build_cfg.h" )
-
-build/build_tag.h: update_tag
-build/build_cfg.h: update_cfg
 
 build/%.bin: data/%.bin
 	$(QUIET)echo "  IMG   $@"
@@ -261,8 +277,16 @@ build/%.bin: font/%.bin
 	$(QUIET)mkdir -p "$(dir $@)"
 	$(QUIET)cp $< $@
 
-build/main.o: build/build_tag.h build/build_cfg.h src/main.c
-build/usb_dwc3.o: build/build_tag.h src/usb_dwc3.c
-build/chainload.o: build/build_cfg.h src/usb_dwc3.c
+build/%.rgba: data/%.png
+	$(eval SIZE := $(lastword $(subst _, ,$*)))
+	$(QUIET)echo "  MAGIC $@"
+	$(QUIET)mkdir -p "$(dir $@)"
+	$(QUIET)magick $< -background black -flatten -depth 8 -crop $(SIZE)x$(SIZE) -resize $(SIZE)x$(SIZE) rgba:$@
+
+build/%.logo: build/%_256.rgba build/%_128.rgba
+	$(QUIET)echo "  PAYLOAD $@"
+	$(QUIET)mkdir -p "$(dir $@)"
+	$(QUIET)echo -n "m1n1_logo_256128" > $@
+	$(QUIET)cat $^ >> $@
 
 -include $(DEPDIR)/*
