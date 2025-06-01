@@ -890,6 +890,13 @@ void hv_exc_sync(struct exc_info *ctx)
             hv_wdt_breadcrumb('m');
             handled = hv_handle_msr_unlocked(ctx, FIELD_GET(ESR_ISS, ctx->esr));
             break;
+        //
+        // for Blizzard/Avalanche and later - we need to explicitly check for SMC EC to handle SMCs
+        //
+        case ESR_EC_SMC:
+            hv_wdt_breadcrumb('s');
+            handled = hv_handle_smc(ctx);
+            break;
         case ESR_EC_IMPDEF:
             hv_wdt_breadcrumb('a');
             if(ctx->afsr1 == 0x1c00000) {

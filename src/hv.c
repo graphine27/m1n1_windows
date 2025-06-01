@@ -66,6 +66,11 @@ void hv_init(void)
     hv_pt_init();
 
     // Configure hypervisor defaults
+
+    //
+    // UNKNOWN: do we need to bring TGE back? might have misunderstood why it was there at the start.
+    // leaving it off for now.
+    //
     hv_write_hcr(HCR_API | // Allow PAuth instructions
                  HCR_APK | // Allow PAuth key registers
                  HCR_TEA | // Trap external aborts

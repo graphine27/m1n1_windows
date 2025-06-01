@@ -17,6 +17,7 @@ void *el0_stack_base = (void *)(u64)(&el0_stack[EL0_STACK_SIZE]);
 
 extern char _vectors_start[0];
 extern char _el1_vectors_start[0];
+extern bool vgic_serror_errata_present;
 
 volatile enum exc_guard_t exc_guard = GUARD_OFF;
 volatile int exc_count = 0;
@@ -428,6 +429,19 @@ void exc_fiq(u64 *regs)
 
 void exc_serr(u64 *regs)
 {
+    //
+    // m1n1_windows special handling: since we're using m1n1 as a hypervisor to virtualize the GIC - on M1 or M2 based SoCs, we will
+    // occasionally hit an errata where SErrors hit by the guest due to violating the GIC state machine will occasionally hit the host.
+    //
+    // While KVM/QEMU work around this by just trapping all accesses to GIC registers, we cannot afford this performance drop in our scenario
+    // so we'll have to infer whenever this occurs and then kick this to the guest, this way a malicious guest cannot take us down, while preserving
+    // the performance we require.
+    //
+    // On M3 and later, guest-generated SErrors in this manner will be routed to the guest as they should be so this workaround won't be
+    // required on those platforms.
+    //
+    // TODO: this handling - right now we're doing the "pray we don't have to implement this" strategy.
+    //
     if (!(exc_guard & GUARD_SILENT))
         printf("Exception: SError\n");
 
