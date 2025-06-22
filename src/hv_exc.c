@@ -10,7 +10,12 @@
 #include "uartproxy.h"
 
 #define TIME_ACCOUNTING
-
+//
+// m1n1_windows change: when the vGIC is running in the guest - timer interrupts by virtue of coming from the generic timer are
+// still going to come as FIQs to EL2 - we'll need to divert those to the guest as *IRQs* (to prevent Windows from crashing as it treats FIQs as
+// errors).
+//
+extern bool vgic_inited;
 extern spinlock_t bhl;
 
 #define _SYSREG_ISS(_1, _2, op0, op1, CRn, CRm, op2)                                               \
@@ -978,6 +983,10 @@ void hv_exc_fiq(struct exc_info *ctx)
     bool tick = false;
 
     hv_maybe_exit();
+
+    //
+    // TODO: inject the FIQ to the guest as an IRQ if vGIC is enabled.
+    //
 
     if (mrs(CNTP_CTL_EL0) == (CNTx_CTL_ISTATUS | CNTx_CTL_ENABLE)) {
         msr(CNTP_CTL_EL0, CNTx_CTL_ISTATUS | CNTx_CTL_IMASK | CNTx_CTL_ENABLE);
