@@ -66,16 +66,35 @@ void hv_init(void)
     hv_pt_init();
 
     // Configure hypervisor defaults
+
+    //
+    // UNKNOWN: do we need to bring TGE back? might have misunderstood why it was there at the start.
+    // leaving it off for now.
+    //
     hv_write_hcr(HCR_API | // Allow PAuth instructions
                  HCR_APK | // Allow PAuth key registers
                  HCR_TEA | // Trap external aborts
-                 HCR_E2H | // VHE mode (forced)
                  HCR_RW |  // AArch64 guest
+                 HCR_TSC | // Trap SMC exceptions (only writable on Blizzard/Avalanche cores as the previous generations used a chicken bit for this.)
                  HCR_AMO | // Trap SError exceptions
+                 HCR_IMO | // Trap IRQ exceptions (for now)
+                 HCR_FMO | // Trap FIQ exceptions (effectively required for now)
                  HCR_VM);  // Enable stage 2 translation
 
     // No guest vectors initially
     msr(VBAR_EL12, 0);
+
+    //set up a HACR bit (56)
+    printf("DEBUG: setting up HACR\n");
+    uint64_t hacr_val = mrs(HACR_EL2);
+    hacr_val |= BIT(56);
+    msr(HACR_EL2, hacr_val);
+
+    //
+    // m1n1_windows change: initialize PSCI.
+    //
+    printf("DEBUG: setting up PSCI\n");
+    hv_psci_init();
 
     // Compute tick interval
     hv_tick_interval = mrs(CNTFRQ_EL0) / HV_TICK_RATE;

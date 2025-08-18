@@ -378,7 +378,7 @@ static int display_swap(u64 iova, u32 stride, u32 width, u32 height)
         .plane_cnt = 1,
         .width = width,
         .height = height,
-        .surface_fmt = FMT_w30r,
+        .surface_fmt = FMT_BGRA,
         .colorspace = 2,
         .eotf = EOTF_GAMMA_SDR,
         .transform = XFRM_NONE,

@@ -51,6 +51,7 @@ typedef enum _hv_entry_type {
     HV_PANIC,
 } hv_entry_type;
 
+
 /* VM */
 void hv_pt_init(void);
 int hv_map(u64 from, u64 to, u64 size, u64 incr);
@@ -119,5 +120,13 @@ void hv_arm_tick(bool secondary);
 void hv_rearm(void);
 void hv_maybe_exit(void);
 void hv_tick(struct exc_info *ctx);
+
+//
+// PSCI init
+//
+
+void hv_psci_init(void);
+bool hv_handle_psci_smc(struct exc_info *ctx);
+int hv_handle_psci_smc_python_entry(uint64_t regs[4]);
 
 #endif

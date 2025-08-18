@@ -78,6 +78,12 @@ void get_notchless_fb(u64 *fb_base, u64 *fb_height)
 
     u32 val;
 
+    //
+    // m1n1_windows HACK: skip the notchless framebuffer check for laptops for now.
+    //
+
+    return;
+
     if ((ADT_GETPROP(adt, node, "partially-occluded-display", &val) < 0 || !val) &&
         (chip_id != T8015 || (board_id != 0x6 && board_id != 0xe))) {
         printf("FDT: No notch detected\n");
@@ -192,6 +198,10 @@ static int dt_set_fb(void)
     u64 fb_base, fb_height;
     get_notchless_fb(&fb_base, &fb_height);
     u64 fb_size = cur_boot_args.video.stride * fb_height;
+    //
+    // m1n1_windows change: align the FB size to the nearest page boundary.
+    //
+    fb_size = ((fb_size + 0x4000) & ~(0x3FFF));
     u64 fbreg[2] = {cpu_to_fdt64(fb_base), cpu_to_fdt64(fb_size)};
     char fbname[32];
 
