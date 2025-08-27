@@ -95,6 +95,15 @@ void hv_init(void)
     //
     printf("DEBUG: setting up PSCI\n");
     hv_psci_init();
+#ifdef ENABLE_VGIC_MODULE
+    //
+    // m1n1_windows change: set up the vGIC
+    //
+
+    //
+    hv_vgicv3_init();
+    //
+#endif
 
     // Compute tick interval
     hv_tick_interval = mrs(CNTFRQ_EL0) / HV_TICK_RATE;

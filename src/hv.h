@@ -126,6 +126,9 @@ void hv_tick(struct exc_info *ctx);
 //
 
 void hv_psci_init(void);
+#ifdef ENABLE_VGIC_MODULE
+void hv_vgicv3_init(void);
+#endif
 bool hv_handle_psci_smc(struct exc_info *ctx);
 int hv_handle_psci_smc_python_entry(uint64_t regs[4]);
 
