@@ -2755,7 +2755,7 @@ int kboot_boot(void *kernel)
     next_stage.args[1] = 0;
     next_stage.args[2] = 0;
     next_stage.args[3] = 0;
-    next_stage.args[4] = 0;
+    next_stage.args[4] = (u64)&cur_boot_args;//boot_args_addr;
     next_stage.restore_logo = false;
 
     return 0;

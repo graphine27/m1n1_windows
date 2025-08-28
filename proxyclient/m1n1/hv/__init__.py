@@ -1786,7 +1786,7 @@ class HV(Reloadable):
         self.u.msr(VMKEYHI_EL2, 0x697665596F755570)
         self.u.msr(APSTS_EL12, 1)
 
-        self.map_vuart()
+        #self.map_vuart()
 
         # ACTLR depends on the CPU part
         part = MIDR(self.u.mrs(MIDR_EL1)).PART
