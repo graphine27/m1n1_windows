@@ -466,7 +466,7 @@ void hv_psci_init(void) {
         psci_cpu_nodes[cpu_identifier].mpidr = ((mpidr_data) | (reg_identifier));
     }
 
-    printf("PSCI DEBUG: Total number of nodes in power domain tree is %d (%d cores, %d clusters, 1 system)\n", 
+    printf("PSCI DEBUG: Total number of nodes in power domain tree is %d (%d cores, %d clusters, %d system)\n", 
     (psci_num_clusters + psci_num_cores + NUM_SYSTEMS_ACTIVE), 
     psci_num_cores, 
     psci_num_clusters, 

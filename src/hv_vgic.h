@@ -2,7 +2,7 @@
 
 #ifndef HV_VGIC_H
 #define HV_VGIC_H
-
+#ifdef ENABLE_VGIC_MODULE
 //========
 // Offsets
 //========
@@ -469,73 +469,75 @@ typedef struct vgicv3_redistributor_region {
 // ITS registers
 //
 
-typedef struct vgicv3_its_ctl_region {
-    //0x0 - GITS_CTLR
-    unsigned int gits_ctl_reg;
-    //0x4 - GITS_IIDR
-    unsigned int gits_iidr;
-    //0x8 - GITS_TYPER
-    uint64_t gits_type_reg;
-    //0x10 - GITS_MPAMIDR
-    unsigned int gits_mpamidr;
-    //0x14 - GITS_PARTIDR
-    unsigned int gits_partidr;
-    //0x18 - GITS_MPIDR
-    unsigned int gits_mpidr;
-    //0x1C - reserved
-    unsigned int gits_reserved0;
-    //0x20-0x3C - IMPDEF reserved
-    unsigned int gits_impdef_reserved0[7];
-    //0x40 - GITS_STATUSR
-    unsigned int gits_statusr;
-    //0x44 - reserved
-    unsigned int gits_reserved1;
-    //0x48 - GITS_UMSIR
-    uint64_t gits_umsir;
-    //0x50-0x7C - reserved
-    unsigned int gits_reserved2[11];
-    //0x80 - GITS_CBASER
-    uint64_t gits_cbaser;
-    //0x88 - GITS_CWRITER
-    uint64_t gits_cwriter;
-    //0x90 - GITS_CREADR
-    uint64_t gits_creadr;
-    //0x98-0xFC - reserved
-    unsigned int gits_reserved3[25];
-    //0x100-0x138 - GITS_BASER(0-7)
-    uint64_t gits_baser[8];
-    //0x140-0xBFFC - reserved
-    unsigned int gits_reserved4[12207];
-    //0xC000-0xFFCC - IMPDEF registers
-    unsigned int gits_impdef_reserved1[4083];
-    //0xFFD0-0xFFFC - ID register reserved
-    unsigned int gits_impdef_reserved2[11];
-} vgicv3_its_ctl_region_t;
+// typedef struct vgicv3_its_ctl_region {
+//     //0x0 - GITS_CTLR
+//     unsigned int gits_ctl_reg;
+//     //0x4 - GITS_IIDR
+//     unsigned int gits_iidr;
+//     //0x8 - GITS_TYPER
+//     uint64_t gits_type_reg;
+//     //0x10 - GITS_MPAMIDR
+//     unsigned int gits_mpamidr;
+//     //0x14 - GITS_PARTIDR
+//     unsigned int gits_partidr;
+//     //0x18 - GITS_MPIDR
+//     unsigned int gits_mpidr;
+//     //0x1C - reserved
+//     unsigned int gits_reserved0;
+//     //0x20-0x3C - IMPDEF reserved
+//     unsigned int gits_impdef_reserved0[7];
+//     //0x40 - GITS_STATUSR
+//     unsigned int gits_statusr;
+//     //0x44 - reserved
+//     unsigned int gits_reserved1;
+//     //0x48 - GITS_UMSIR
+//     uint64_t gits_umsir;
+//     //0x50-0x7C - reserved
+//     unsigned int gits_reserved2[11];
+//     //0x80 - GITS_CBASER
+//     uint64_t gits_cbaser;
+//     //0x88 - GITS_CWRITER
+//     uint64_t gits_cwriter;
+//     //0x90 - GITS_CREADR
+//     uint64_t gits_creadr;
+//     //0x98-0xFC - reserved
+//     unsigned int gits_reserved3[25];
+//     //0x100-0x138 - GITS_BASER(0-7)
+//     uint64_t gits_baser[8];
+//     //0x140-0xBFFC - reserved
+//     unsigned int gits_reserved4[12207];
+//     //0xC000-0xFFCC - IMPDEF registers
+//     unsigned int gits_impdef_reserved1[4083];
+//     //0xFFD0-0xFFFC - ID register reserved
+//     unsigned int gits_impdef_reserved2[11];
+// } vgicv3_its_ctl_region_t;
 
-typedef struct vgicv3_its_translation_region {
-    //0x0-0x3C - reserved
-    unsigned int gits_translation_reserved0[15];
-    //0x40 - GITS_TRANSLATER
-    unsigned int gits_translater;
-    //0x44-0xFFFC - reserved
-    unsigned int gits_translation_reserved0[16366];
-} vgicv3_its_translation_region_t;
+// typedef struct vgicv3_its_translation_region {
+//     //0x0-0x3C - reserved
+//     unsigned int gits_translation_reserved0[15];
+//     //0x40 - GITS_TRANSLATER
+//     unsigned int gits_translater;
+//     //0x44-0xFFFC - reserved
+//     unsigned int gits_translation_reserved1[16366];
+// } vgicv3_its_translation_region_t;
 
-typedef struct vgicv3_its_region {
-    vgicv3_its_ctl_region_t its_ctl_region;
-    //TODO: check if there needs to be a filler here.
-    vgicv3_its_translation_region_t its_translation_region;
-} vgicv3_its;
+// typedef struct vgicv3_its_region {
+//     vgicv3_its_ctl_region_t its_ctl_region;
+//     //TODO: check if there needs to be a filler here.
+//     vgicv3_its_translation_region_t its_translation_region;
+// } vgicv3_its;
 
 
 /* vGIC */
 
-int hv_vgicv3_init(void);
+void hv_vgicv3_init(void);
 
 void hv_vgicv3_init_dist_registers(void);
+
+void hv_vgicv3_init_redist_registers(void);
 
 void hv_vgicv3_init_list_registers(int n);
 
 int hv_vgicv3_enable_virtual_interrupts(void);
-
+#endif //ENABLE_VGIC_MODULE
 #endif //HV_VGIC_H

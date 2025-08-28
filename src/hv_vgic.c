@@ -70,7 +70,7 @@
  * we'll know which core needs to be signaled in those cases.)
  * 
  */
-
+#ifdef ENABLE_VGIC_MODULE
 #define DIST_BASE_36_BIT 0xF00000000
 #define REDIST_BASE_36_BIT 0xF10000000
 #define DIST_BASE_42_BIT 0x5000000000
@@ -84,7 +84,7 @@
 
 vgicv3_dist *distributor;
 vgicv3_vcpu_redist *redistributors;
-vgicv3_its *interrupt_translation_service;
+// vgicv3_its *interrupt_translation_service;
 static u64 dist_base, redist_base, its_base;
 static u16 num_cpus;
 static bool vgic_inited;
@@ -385,7 +385,7 @@ static bool handle_vgic_dist_access(struct exc_info *ctx, u64 addr, u64 *val, bo
             // There has to be a way more efficient way of doing this...
             //
 
-            for (u32 i; i < 32; i++) {
+            for (u32 i = 0; i < 32; i++) {
                 if( ( (current_val & BIT(i)) != 0 ) && ( ( value_is_enabler & BIT(i) ) == 0) ) {
                     value_is_enabler |= BIT(i);
                     value_ic_enabler |= BIT(i);
@@ -424,7 +424,7 @@ static bool handle_vgic_dist_access(struct exc_info *ctx, u64 addr, u64 *val, bo
             //
             // There has to be a way more efficient way of doing this...
             //
-            for (u32 i; i < 32; i++) {
+            for (u32 i = 0; i < 32; i++) {
                 if( ( (current_val & BIT(i)) != 0 ) && ( ( value_ic_enabler & BIT(i) ) != 0) ) {
                     value_is_enabler &= ~BIT(i);
                     value_ic_enabler &= ~BIT(i);
@@ -461,7 +461,7 @@ static bool handle_vgic_dist_access(struct exc_info *ctx, u64 addr, u64 *val, bo
             //
             // There has to be a way more efficient way of doing this...
             //
-            for (u32 i; i < 32; i++) {
+            for (u32 i = 0; i < 32; i++) {
                 if( ( (current_val & BIT(i)) != 0 ) && ( ( value_ic_enabler & BIT(i) ) == 0) ) {
                     value_is_enabler &= ~BIT(i);
                     value_ic_enabler &= ~BIT(i);
@@ -497,7 +497,7 @@ static bool handle_vgic_dist_access(struct exc_info *ctx, u64 addr, u64 *val, bo
             //
             // There has to be a way more efficient way of doing this...
             //
-            for (u32 i; i < 32; i++) {
+            for (u32 i = 0; i < 32; i++) {
                 if( ( (current_val & BIT(i)) != 0 ) && ( ( value_ic_enabler & BIT(i) ) != 0) ) {
                     value_is_enabler &= ~BIT(i);
                     value_ic_enabler &= ~BIT(i);
@@ -740,6 +740,14 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
     register_handled = false;
     unimplemented_reg_accessed = false;
     u8 cpu_num;
+    u32 value_is_enabler, value_ic_enabler, current_val;
+    u32 irq_num;
+    u32 reg_num;
+    value_ic_enabler = 0;
+    value_is_enabler = 0;
+    current_val = 0;
+    irq_num = 0;
+    reg_num = 0;
 
     cpu_num = ctx->cpu_id;
     if(write) {
@@ -947,8 +955,8 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
                 register_handled = true;
                 break;
             case GIC_REDIST_ISENABLER0:
-                u32 value_is_enabler, value_ic_enabler, current_val;
-                u32 irq_num;
+                // u32 value_is_enabler, value_ic_enabler, current_val;
+                // u32 irq_num;
                 value_is_enabler = redistributors[cpu_num].sgi_region.gicr_isactiver0;
                 value_ic_enabler = redistributors[cpu_num].sgi_region.gicr_icactiver0;
                 current_val = *val;
@@ -975,8 +983,8 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
                 register_handled = true;
                 break;
             case GIC_REDIST_ICENABLER0:
-                u32 value_is_enabler, value_ic_enabler, current_val;
-                u32 irq_num;
+                // u32 value_is_enabler, value_ic_enabler, current_val;
+                // u32 irq_num;
                 value_is_enabler = redistributors[cpu_num].sgi_region.gicr_isactiver0;
                 value_ic_enabler = redistributors[cpu_num].sgi_region.gicr_icactiver0;
                 current_val = *val;
@@ -1003,8 +1011,8 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
                 register_handled = true;
                 break;
             case GIC_REDIST_ISPENDR0:
-                u32 value_is_enabler, value_ic_enabler, current_val;
-                u32 irq_num;
+                // u32 value_is_enabler, value_ic_enabler, current_val;
+                // u32 irq_num;
                 value_is_enabler = redistributors[cpu_num].sgi_region.gicr_ispendr0;
                 value_ic_enabler = redistributors[cpu_num].sgi_region.gicr_icpendr0;
                 current_val = *val;
@@ -1031,8 +1039,8 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
                 redistributors[cpu_num].sgi_region.gicr_icactiver0 = value_ic_enabler;
                 break;
             case GIC_REDIST_ICPENDR0:
-                u32 value_is_enabler, value_ic_enabler, current_val;
-                u32 irq_num;
+                // u32 value_is_enabler, value_ic_enabler, current_val;
+                // u32 irq_num;
                 value_is_enabler = redistributors[cpu_num].sgi_region.gicr_ispendr0;
                 value_ic_enabler = redistributors[cpu_num].sgi_region.gicr_icpendr0;
                 current_val = *val;
@@ -1059,8 +1067,8 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
                 redistributors[cpu_num].sgi_region.gicr_icactiver0 = value_ic_enabler;
                 break;
             case GIC_REDIST_ISACTIVER0:
-                u32 value_is_enabler, value_ic_enabler, current_val;
-                u32 irq_num;
+                // u32 value_is_enabler, value_ic_enabler, current_val;
+                // u32 irq_num;
                 value_is_enabler = redistributors[cpu_num].sgi_region.gicr_isactiver0;
                 value_ic_enabler = redistributors[cpu_num].sgi_region.gicr_icactiver0;
                 current_val = *val;
@@ -1087,8 +1095,8 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
                 redistributors[cpu_num].sgi_region.gicr_icactiver0 = value_ic_enabler;
                 break;
             case GIC_REDIST_ICACTIVER0:
-                u32 value_is_enabler, value_ic_enabler, current_val;
-                u32 irq_num;
+                // u32 value_is_enabler, value_ic_enabler, current_val;
+                // u32 irq_num;
                 value_is_enabler = redistributors[cpu_num].sgi_region.gicr_isactiver0;
                 value_ic_enabler = redistributors[cpu_num].sgi_region.gicr_icactiver0;
                 current_val = *val;
@@ -1134,7 +1142,7 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
             case GIC_REDIST_IPRIORITYR1:
             case GIC_REDIST_IPRIORITYR2:
             case GIC_REDIST_IPRIORITYR3:
-                u32 reg_num;
+                // u32 reg_num;
                 reg_num = (relative_addr - GIC_REDIST_IPRIORITYR0) / 4;
                 redistributors[cpu_num].sgi_region.gicr_ppi_ipriority_reg[reg_num] = *val;
                 register_handled = true;
@@ -1143,7 +1151,7 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
             case GIC_REDIST_IPRIORITYR5:
             case GIC_REDIST_IPRIORITYR6:
             case GIC_REDIST_IPRIORITYR7:
-                u32 reg_num;
+                // u32 reg_num;
                 reg_num = (relative_addr - GIC_REDIST_IPRIORITYR4) / 4;
                 redistributors[cpu_num].sgi_region.gicr_ppi_ipriority_reg[reg_num] = *val;
                 register_handled = true;
@@ -1267,7 +1275,7 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
             case GIC_REDIST_IPRIORITYR1:
             case GIC_REDIST_IPRIORITYR2:
             case GIC_REDIST_IPRIORITYR3:
-                u32 reg_num;
+                // u32 reg_num;
                 reg_num = (relative_addr - GIC_REDIST_IPRIORITYR0) / 4;
                 *val = redistributors[cpu_num].sgi_region.gicr_ppi_ipriority_reg[reg_num];
                 register_handled = true;
@@ -1276,7 +1284,7 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
             case GIC_REDIST_IPRIORITYR5:
             case GIC_REDIST_IPRIORITYR6:
             case GIC_REDIST_IPRIORITYR7:
-                u32 reg_num;
+                // u32 reg_num;
                 reg_num = (relative_addr - GIC_REDIST_IPRIORITYR4) / 4;
                 *val = redistributors[cpu_num].sgi_region.gicr_ppi_ipriority_reg[reg_num];
                 register_handled = true;
@@ -1304,120 +1312,6 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
         printf("\n");
     }
     return register_handled;
-}
-
-
-/**
- * @brief hv_vgicv3_init
- * 
- * Initializes the vGIC and prepares it for use by the guest OS.
- * 
- * Note that this function is only expected to be called once.
- * 
- * @return 
- * 
- * 0 - success, vGIC is ready for use by the guest
- * -1 - an error has occurred during vGIC initialization, refer to m1n1 output log for details on the specific error 
- */
-
-int hv_vgicv3_init(void)
-{
-    printf("HV vGIC DEBUG: start\n");
-    vgic_inited = false;
-    //
-    // First things first - set the parameters appropriately based on whether
-    // we're running on a 36-bit or 42-bit platform.
-    // Also for now, we are catering to "lowest common denominator" for all chips,
-    // so on more powerful systems we may not be using all cores.
-    //
-    switch(chip_id) {
-        case T8103:
-        case T8112:
-            dist_base = DIST_BASE_36_BIT;
-            redist_base = REDIST_BASE_36_BIT;
-            its_base = ITS_BASE_36_BIT;
-            num_cpus = 8;
-            break;
-        // case T8010:
-        // case T8015:
-        // case T8011:
-        // case T8012:
-        //     dist_base = DIST_BASE_36_BIT;
-        //     redist_base = REDIST_BASE_36_BIT;
-        //     its_base = ITS_BASE_36_BIT;
-        //     break;
-        case T6000:
-            dist_base = DIST_BASE_42_BIT;
-            redist_base = REDIST_BASE_42_BIT;
-            its_base = ITS_BASE_42_BIT;
-            num_cpus = 8; // cannot assume that we have 10 cores for M1 Pro
-        case T6001:
-            dist_base = DIST_BASE_42_BIT;
-            redist_base = REDIST_BASE_42_BIT;
-            its_base = ITS_BASE_42_BIT;
-            num_cpus = 10;
-        case T6002:
-            dist_base = DIST_BASE_42_BIT;
-            redist_base = REDIST_BASE_42_BIT;
-            its_base = ITS_BASE_42_BIT;
-            num_cpus = 20;
-        case T6020:
-            dist_base = DIST_BASE_42_BIT;
-            redist_base = REDIST_BASE_42_BIT;
-            its_base = ITS_BASE_42_BIT;
-            num_cpus = 10;
-        case T6021:
-            dist_base = DIST_BASE_42_BIT;
-            redist_base = REDIST_BASE_42_BIT;
-            its_base = ITS_BASE_42_BIT;
-            num_cpus = 12;
-        case T6022:
-            dist_base = DIST_BASE_42_BIT;
-            redist_base = REDIST_BASE_42_BIT;
-            its_base = ITS_BASE_42_BIT;
-            num_cpus = 24;
-        // case T6030:
-        // case T6031:
-        // case 0x6032:
-        // case T6034:
-        // case 0x6040:
-        // case 0x6041:
-        // case T8122:
-        //     dist_base = DIST_BASE_42_BIT;
-        //     redist_base = REDIST_BASE_42_BIT;
-        //     its_base = ITS_BASE_42_BIT;
-        //     break;
-    }
-    //
-    // Step 1 - distributor setup.
-    //
-    printf("HV vGIC DEBUG: setting up distributor\n");
-    distributor = heapblock_alloc(sizeof(vgicv3_dist));
-    hv_vgicv3_init_dist_registers();
-    //
-    // Map the vGIC distributor into unoccupied MMIO space.
-    //
-    printf("HV vGIC DEBUG: mapping distributor into guest space\n");
-    hv_map_hook(dist_base, handle_vgic_dist_access, 0x10000);
-
-
-    /* Redistributor setup */
-    printf("HV vGIC DEBUG: setting up redistributors\n");
-    redistributors = heapblock_alloc(sizeof(vgicv3_vcpu_redist) * num_cpus);
-    hv_vgicv3_init_redist_registers();
-    printf("HV vGIC DEBUG: mapping redistributors into guest space\n");
-    hv_map_hook(redist_base, handle_vgic_redist_access, ((0x20000) * num_cpus));
-
-    //
-    // ITS setup (for MSIs - PCIe devices usually signal via these.)
-    // Disabled for now, seems like direct injection into the guest is easier.
-    //
-
-    // hv_map_hook(its_base, handle_vgic_access, sizeof(vgicv3_its));
-
-    //vGIC setup is complete.
-    vgic_inited = true;
-    return 0;
 }
 
 /**
@@ -1599,3 +1493,122 @@ int hv_vgicv3_enable_virtual_interrupts(void)
 
     return 0;
 }
+#endif
+/**
+ * @brief hv_vgicv3_init
+ * 
+ * Initializes the vGIC and prepares it for use by the guest OS.
+ * 
+ * Note that this function is only expected to be called once.
+ * 
+ * @return 
+ * 
+ * 0 - success, vGIC is ready for use by the guest
+ * -1 - an error has occurred during vGIC initialization, refer to m1n1 output log for details on the specific error 
+ */
+
+void hv_vgicv3_init(void)
+{
+#ifdef ENABLE_VGIC_MODULE
+    printf("HV vGIC DEBUG: start\n");
+    vgic_inited = false;
+    //
+    // First things first - set the parameters appropriately based on whether
+    // we're running on a 36-bit or 42-bit platform.
+    // Also for now, we are catering to "lowest common denominator" for all chips,
+    // so on more powerful systems we may not be using all cores.
+    //
+    switch(chip_id) {
+        case T8103:
+        case T8112:
+            dist_base = DIST_BASE_36_BIT;
+            redist_base = REDIST_BASE_36_BIT;
+            its_base = ITS_BASE_36_BIT;
+            num_cpus = 8;
+            break;
+        // case T8010:
+        // case T8015:
+        // case T8011:
+        // case T8012:
+        //     dist_base = DIST_BASE_36_BIT;
+        //     redist_base = REDIST_BASE_36_BIT;
+        //     its_base = ITS_BASE_36_BIT;
+        //     break;
+        case T6000:
+            dist_base = DIST_BASE_42_BIT;
+            redist_base = REDIST_BASE_42_BIT;
+            its_base = ITS_BASE_42_BIT;
+            num_cpus = 8; // cannot assume that we have 10 cores for M1 Pro
+        case T6001:
+            dist_base = DIST_BASE_42_BIT;
+            redist_base = REDIST_BASE_42_BIT;
+            its_base = ITS_BASE_42_BIT;
+            num_cpus = 10;
+        case T6002:
+            dist_base = DIST_BASE_42_BIT;
+            redist_base = REDIST_BASE_42_BIT;
+            its_base = ITS_BASE_42_BIT;
+            num_cpus = 20;
+        case T6020:
+            dist_base = DIST_BASE_42_BIT;
+            redist_base = REDIST_BASE_42_BIT;
+            its_base = ITS_BASE_42_BIT;
+            num_cpus = 10;
+        case T6021:
+            dist_base = DIST_BASE_42_BIT;
+            redist_base = REDIST_BASE_42_BIT;
+            its_base = ITS_BASE_42_BIT;
+            num_cpus = 12;
+        case T6022:
+            dist_base = DIST_BASE_42_BIT;
+            redist_base = REDIST_BASE_42_BIT;
+            its_base = ITS_BASE_42_BIT;
+            num_cpus = 24;
+        // case T6030:
+        // case T6031:
+        // case 0x6032:
+        // case T6034:
+        // case 0x6040:
+        // case 0x6041:
+        // case T8122:
+        //     dist_base = DIST_BASE_42_BIT;
+        //     redist_base = REDIST_BASE_42_BIT;
+        //     its_base = ITS_BASE_42_BIT;
+        //     break;
+    }
+    //
+    // Step 1 - distributor setup.
+    //
+    printf("HV vGIC DEBUG: setting up distributor\n");
+    distributor = heapblock_alloc(sizeof(vgicv3_dist));
+    hv_vgicv3_init_dist_registers();
+    //
+    // Map the vGIC distributor into unoccupied MMIO space.
+    //
+    printf("HV vGIC DEBUG: mapping distributor into guest space\n");
+    hv_map_hook(dist_base, handle_vgic_dist_access, 0x10000);
+
+
+    /* Redistributor setup */
+    printf("HV vGIC DEBUG: setting up redistributors\n");
+    redistributors = heapblock_alloc(sizeof(vgicv3_vcpu_redist) * num_cpus);
+    hv_vgicv3_init_redist_registers();
+    printf("HV vGIC DEBUG: mapping redistributors into guest space\n");
+    hv_map_hook(redist_base, handle_vgic_redist_access, ((0x20000) * num_cpus));
+
+    //
+    // ITS setup (for MSIs - PCIe devices usually signal via these.)
+    // Disabled for now, seems like direct injection into the guest is easier.
+    //
+
+    // hv_map_hook(its_base, handle_vgic_access, sizeof(vgicv3_its));
+
+    //vGIC setup is complete.
+    vgic_inited = true;
+    return;
+#else
+    printf("HV vGIC DEBUG: Disabled\n");
+    return;
+#endif //ENABLE_VGIC_MODULE
+}
+
