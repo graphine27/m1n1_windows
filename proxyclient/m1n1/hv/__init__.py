@@ -748,7 +748,7 @@ class HV(Reloadable):
                     if((value & (1 << 20)) != 0):
                         calculated = (calculated | (1 << 9))
                     calculated = (calculated | (1 << 6) | (1 << 7))
-                    self.log(f"HV PMUv3 Redirect: mrs x{iss.RT}, {name} = {calculated:x}")
+                    self.log(f"HV PMUv3 Redirect: mrs x{iss.Rt}, {name} = {calculated:x}")
                     if iss.Rt != 31:
                         ctx.regs[iss.Rt] = calculated
 
@@ -764,7 +764,7 @@ class HV(Reloadable):
                     calculated = 0
                     if((value & (1 << 0)) == 1):
                         calculated = (calculated | (1 << 31))
-                    self.log(f"HV PMUv3 Redirect: mrs x{iss.RT}, {name} = {calculated:x}")
+                    self.log(f"HV PMUv3 Redirect: mrs x{iss.Rt}, {name} = {calculated:x}")
                     if iss.Rt != 31:
                         ctx.regs[iss.Rt] = calculated
                 elif enc == PMCCFILTR_EL0:
@@ -784,14 +784,14 @@ class HV(Reloadable):
                         calculated = (calculated | (1 << 30))
                     if((value & el1_cycle_counter_mask) == 0):
                         calculated = (calculated | (1 << 31))
-                    self.log(f"HV PMUv3 Redirect: mrs x{iss.RT}, {name} = {calculated:x}")
+                    self.log(f"HV PMUv3 Redirect: mrs x{iss.Rt}, {name} = {calculated:x}")
                     if iss.Rt != 31:
                         ctx.regs[iss.Rt] = calculated
                 
                 elif (enc == PMMIR_EL1) or (enc == PMCEID0_EL0) or (enc == PMCEID1_EL0):
                     # return 0 for these registers for now.
                     value = 0
-                    self.log(f"HV PMUv3 Redirect: mrs x{iss.RT}, {name} = {value:x}")
+                    self.log(f"HV PMUv3 Redirect: mrs x{iss.Rt}, {name} = {value:x}")
                     if iss.Rt != 31:
                         ctx.regs[iss.Rt] = value
                 elif (enc == PMINTENCLR_EL1) or (enc == PMINTENSET_EL1):
@@ -803,7 +803,7 @@ class HV(Reloadable):
                     calculated = 0
                     if(value & (1 << 12) != 0):
                         calculated = (calculated | (1 << 31))
-                    self.log(f"HV PMUv3 Redirect: mrs x{iss.RT}, {name} = {calculated:x}")
+                    self.log(f"HV PMUv3 Redirect: mrs x{iss.Rt}, {name} = {calculated:x}")
                     if iss.Rt != 31:
                         ctx.regs[iss.Rt] = calculated
                 elif (enc == PMOVSCLR_EL0) or (enc == PMOVSSET_EL0):
@@ -813,13 +813,13 @@ class HV(Reloadable):
                     calculated = 0
                     if((value & (1 << 0)) != 0):
                         calculated = (calculated | (1 << 31))
-                    self.log(f"HV PMUv3 Redirect: mrs x{iss.RT}, {name} = {calculated:x}")
+                    self.log(f"HV PMUv3 Redirect: mrs x{iss.Rt}, {name} = {calculated:x}")
                     if iss.Rt != 31:
                         ctx.regs[iss.Rt] = calculated
                 elif enc == PMSELR_EL0:
                     # always report that the cycle counter is selected for now and discard writes, this will probably need to change later on.
                     value = 31
-                    self.log(f"HV PMUv3 Redirect: mrs x{iss.RT}, {name} = {value:x}")
+                    self.log(f"HV PMUv3 Redirect: mrs x{iss.Rt}, {name} = {value:x}")
                     if iss.Rt != 31:
                         ctx.regs[iss.Rt] = value
                 elif enc == PMUSERENR_EL0:
@@ -833,14 +833,14 @@ class HV(Reloadable):
                     user_mode_pmc_reg_access_enable_mask = (1 << 30)
                     if((value & user_mode_pmc_reg_access_enable_mask) != 0):
                         calculated = (calculated | (1 << 0))
-                    self.log(f"HV PMUv3 Redirect: mrs x{iss.RT}, {name} = {calculated:x}")
+                    self.log(f"HV PMUv3 Redirect: mrs x{iss.Rt}, {name} = {calculated:x}")
                     if iss.Rt != 31:
                         ctx.regs[iss.Rt] = calculated
                 
                 else:
                     # the register is unimplemented for now, just return 0
                     value = 0
-                    self.log(f"Unimplemented register - HV PMUv3 Redirect: mrs x{iss.RT}, {name} = {value:x}")
+                    self.log(f"Unimplemented register - HV PMUv3 Redirect: mrs x{iss.Rt}, {name} = {value:x}")
                     if iss.Rt != 31:
                         ctx.regs[iss.Rt] = value
 
