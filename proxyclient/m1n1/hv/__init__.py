@@ -919,7 +919,7 @@ class HV(Reloadable):
                     counters_to_be_enabled_mask = 0xffffffff
                     cycle_counter_bit_apple = (1 << 0)
                     # fast track if nothing is being asked to be enabled
-                    if((desired_value_to_write & counters_to_be_disabled_mask) != 0):
+                    if((desired_value_to_write & counters_to_be_enabled_mask) != 0):
                         # as with disabling, cycle counter only for now.
                         if((desired_value_to_write & (1 << 31)) != 0):
                             pmcr_current_value = (pmcr_current_value | (1 << 0))
@@ -996,6 +996,9 @@ class HV(Reloadable):
                         self.u.inst(0xd5033fdf) # isb
 
                     self.log(f"HV PMUv3 Redirect: msr {name}, x{iss.Rt} = {desired_value_to_write:x} (OK) ({sysreg_name(enc)})")
+                elif enc == PMUSERENR_EL0:
+
+                    self.log(f"HV PMUv3 Redirect: msr {name}, x{iss.Rt} = {desired_value_to_write:x} (OK) ({sysreg_name(enc)})")
                 else:
                     # discard any writes to other registers.
                     # if we need to change this for another register, remember to add it above this else statement.
@@ -1029,7 +1032,7 @@ class HV(Reloadable):
         #can't call C exception handler from python directly for now, so need to pass args from here to the C functions.
         retval = 0 # corresponds to PSCI_STATUS_SUCCESS
         psci_function_id = ctx.regs[0]
-        self.log(f"Python HV PSCI: function call {psci_function_id:x}")
+        self.log(f"Python HV PSCI: function call {psci_function_id:x} - {ctx.regs[1]}")
         if(psci_function_id == 0x84000000):
             ctx.regs[0] = ((1 << 16) | (1))
         elif((psci_function_id == 0x84000001) or (psci_function_id == 0xC4000001)):
@@ -1786,7 +1789,7 @@ class HV(Reloadable):
         self.u.msr(VMKEYHI_EL2, 0x697665596F755570)
         self.u.msr(APSTS_EL12, 1)
 
-        #self.map_vuart()
+        self.map_vuart()
 
         # ACTLR depends on the CPU part
         part = MIDR(self.u.mrs(MIDR_EL1)).PART
