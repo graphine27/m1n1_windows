@@ -114,6 +114,39 @@ union usb_setup_packet {
 
 #define USB_LANGID_EN_US 0x0409
 
+struct usb_iad_descriptor {
+    u8 bLength;
+    u8 bDescriptorType;
+    u8 bFirstInterface;
+    u8 bInterfaceCount;
+    u8 bFunctionClass;
+    u8 bFunctionSubClass;
+    u8 bFunctionProtocol;
+    u8 iFunction;
+} PACKED;
+
+struct cdc_header_desc {
+    u8  bFunctionLength;
+    u8  bDescriptorType;
+    u8  bDescriptorSubtype;
+    u16 bcdCDC;
+} PACKED;
+
+struct cdc_call_mgmt_desc {
+    u8 bFunctionLength;
+    u8 bDescriptorType;
+    u8 bDescriptorSubtype;
+    u8 bmCapabilities;
+    u8 bDataInterface;
+} PACKED;
+
+struct cdc_acm_desc {
+    u8 bFunctionLength;
+    u8 bDescriptorType;
+    u8 bDescriptorSubtype;
+    u8 bmCapabilities;
+} PACKED;
+
 struct usb_device_descriptor {
     u8 bLength;
     u8 bDescriptorType;
