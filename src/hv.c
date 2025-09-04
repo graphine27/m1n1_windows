@@ -12,7 +12,7 @@
 #include "usb.h"
 #include "utils.h"
 
-#define HV_TICK_RATE      1000
+#define HV_TICK_RATE      5000
 #define HV_SLOW_TICK_RATE 1
 
 DECLARE_SPINLOCK(bhl);

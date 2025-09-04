@@ -97,7 +97,7 @@ static bool handle_vuart(struct exc_info *ctx, u64 addr, u64 *val, bool write, i
                 if (iodev_can_write(IODEV_USB_VUART))
                     iodev_write(IODEV_USB_VUART, &b, 1);
                 //printf("%c", b);
-                //handle_vuart_passthrough(b);
+                handle_vuart_passthrough(b);
                 break;
             }
             case UTRSTAT:
@@ -123,7 +123,7 @@ static bool handle_vuart(struct exc_info *ctx, u64 addr, u64 *val, bool write, i
                 *val = utrstat;
                 break;
             case UFSTAT://m1n1_windows ugly hack, but only sam5250 driver seems to read this
-                *val = utrstat & UTRSTAT_TXBE ? 0 : ufstat | BIT(24);
+                *val = utrstat & UTRSTAT_TXBE ? ufstat : ufstat | BIT(24);
                 break;
             case UERSTAT:
                 *val = 0;
