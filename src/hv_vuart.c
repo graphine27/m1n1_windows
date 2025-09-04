@@ -96,7 +96,8 @@ static bool handle_vuart(struct exc_info *ctx, u64 addr, u64 *val, bool write, i
                 uint8_t b = *val;
                 if (iodev_can_write(IODEV_USB_VUART))
                     iodev_write(IODEV_USB_VUART, &b, 1);
-                handle_vuart_passthrough(b);
+                //printf("%c", b);
+                //handle_vuart_passthrough(b);
                 break;
             }
             case UTRSTAT:
@@ -112,6 +113,7 @@ static bool handle_vuart(struct exc_info *ctx, u64 addr, u64 *val, bool write, i
                 if (iodev_can_read(IODEV_USB_VUART)) {
                     uint8_t c;
                     iodev_read(IODEV_USB_VUART, &c, 1);
+                    //printf("%c", c);
                     *val = c;
                 } else {
                     *val = 0;
