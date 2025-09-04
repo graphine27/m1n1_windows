@@ -135,6 +135,8 @@ class UartInterface(Reloadable):
     DEFAULT_BAUD_RATE=115200
     if platform.system() == 'Darwin':
         DEFAULT_UART_DEV="/dev/cu.usbmodemP_01"
+    if platform.system() == 'Windows':
+        DEFAULT_UART_DEV="COM4"
 
     def __init__(self, device=None, debug=False):
         self.debug = debug

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-import atexit, serial, os, struct, code, traceback, readline, rlcompleter, sys
+import atexit, serial, os, struct, code, traceback, rlcompleter, sys, platform
 import __main__
 import builtins
 import re
@@ -9,6 +9,14 @@ from .proxyutils import *
 from .utils import *
 from . import sysreg
 from inspect import isfunction, signature
+
+
+if(platform.uname().system == "Windows"):
+    from pyreadline3 import Readline
+    readline = Readline()
+else:
+    import readline
+
 
 __all__ = ["ExitConsole", "run_shell"]
 

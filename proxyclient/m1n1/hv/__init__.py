@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-import io, sys, traceback, struct, array, bisect, os, plistlib, signal, runpy
+import io, sys, traceback, struct, array, bisect, os, plistlib, signal, runpy, platform
 from construct import *
 
 from ..asm import ARMAsm
@@ -1431,7 +1431,11 @@ class HV(Reloadable):
         self.cont()
 
     def cont(self):
-        os.kill(os.getpid(), signal.SIGUSR1)
+        if(platform.uname().system == "Windows"):
+            int_signal = signal.SIGINT
+        else:
+            int_signal = signal.SIGUSR1
+        os.kill(os.getpid(), int_signal)
 
     def _lower(self):
         if not self.is_fault:
@@ -1583,7 +1587,11 @@ class HV(Reloadable):
             self.cpu(cpu_id)
 
     def exit(self):
-        os.kill(os.getpid(), signal.SIGUSR2)
+        if(platform.uname().system == "Windows"):
+            int_signal = signal.SIGTERM
+        else:
+            int_signal = signal.SIGUSR2
+        os.kill(os.getpid(), int_signal)
 
     def reboot(self):
         print("Hard rebooting the system")
@@ -2268,7 +2276,10 @@ class HV(Reloadable):
         print(f"Jumping to entrypoint at 0x{self.entry:x}")
 
         self.iface.dev.timeout = None
-        self.default_sigint = signal.signal(signal.SIGINT, self._handle_sigint)
+        if(platform.uname().system == "Windows"):
+            self.default_sigint = signal.signal(signal.SIGBREAK, self._handle_sigint)
+        else:
+            self.default_sigint = signal.signal(signal.SIGINT, self._handle_sigint)
 
         set_sigquit_stackdump_handler()
 
