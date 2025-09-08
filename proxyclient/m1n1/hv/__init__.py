@@ -401,9 +401,15 @@ class HV(Reloadable):
         def handle_sigusr2(signal, stack):
             raise shell.ExitConsole(EXC_RET.EXIT_GUEST)
 
-        default_sigusr1 = signal.signal(signal.SIGUSR1, handle_sigusr1)
+        if(platform.uname().system == "Windows"):
+            default_sigusr1 = signal.signal(signal.SIGBREAK, handle_sigusr1)
+        else:
+            default_sigusr1 = signal.signal(signal.SIGUSR1, handle_sigusr1)
         try:
-            default_sigusr2 = signal.signal(signal.SIGUSR2, handle_sigusr2)
+            if(platform.uname().system == "Windows"):
+                default_sigusr2 = signal.signal(signal.SIGTERM, handle_sigusr2)
+            else:
+                default_sigusr2 = signal.signal(signal.SIGUSR2, handle_sigusr2)
             try:
                 self._in_shell = True
                 try:
@@ -413,9 +419,15 @@ class HV(Reloadable):
                 finally:
                     self._in_shell = False
             finally:
-                signal.signal(signal.SIGUSR2, default_sigusr2)
+                if(platform.uname().system == "Windows"):
+                    signal.signal(signal.SIGTERM, default_sigusr2)
+                else:
+                    signal.signal(signal.SIGUSR2, default_sigusr2)
         finally:
-            signal.signal(signal.SIGUSR1, default_sigusr1)
+            if(platform.uname().system == "Windows"):
+                signal.signal(signal.SIGTERM, default_sigusr1)
+            else:
+                signal.signal(signal.SIGUSR1, default_sigusr1)
 
     @property
     def in_shell(self):
@@ -1432,7 +1444,7 @@ class HV(Reloadable):
 
     def cont(self):
         if(platform.uname().system == "Windows"):
-            int_signal = signal.SIGINT
+            int_signal = signal.CTRL_BREAK_EVENT
         else:
             int_signal = signal.SIGUSR1
         os.kill(os.getpid(), int_signal)
@@ -2276,11 +2288,7 @@ class HV(Reloadable):
         print(f"Jumping to entrypoint at 0x{self.entry:x}")
 
         self.iface.dev.timeout = None
-        if(platform.uname().system == "Windows"):
-            self.default_sigint = signal.signal(signal.SIGBREAK, self._handle_sigint)
-        else:
-            self.default_sigint = signal.signal(signal.SIGINT, self._handle_sigint)
-
+        self.default_sigint = signal.signal(signal.SIGINT, self._handle_sigint)
         set_sigquit_stackdump_handler()
 
         if self.wdt_cpu is not None:
