@@ -29,7 +29,7 @@
 //
 // Enable the vGIC module.
 //
-// #define ENABLE_VGIC_MODULE
+ #define ENABLE_VGIC_MODULE
 
 //
 // Use PSCI to turn on the CPUs in earnest rather than just setting up the spintables that m1n1 uses.

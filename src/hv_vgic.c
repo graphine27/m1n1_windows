@@ -563,6 +563,7 @@ static bool handle_vgic_dist_access(struct exc_info *ctx, u64 addr, u64 *val, bo
                 break;
             case GIC_DIST_TYPER:
                 *val = distributor->gicd_type_reg;
+                register_handled = true;
             case GIC_DIST_TYPER2:
                 *val = distributor->gicd_type_reg_2;
                 register_handled = true;
@@ -736,7 +737,7 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
     u64 relative_addr;
     bool register_handled;
     bool unimplemented_reg_accessed;
-    relative_addr = addr - dist_base;
+    relative_addr = addr - redist_base;
     register_handled = false;
     unimplemented_reg_accessed = false;
     u8 cpu_num;
@@ -1416,7 +1417,7 @@ void hv_vgicv3_assign_redist_affinity_value(u16 cpu_num, bool last_cpu) {
 
 }
 
-void hv_vgicv3_init_redist_registers() {
+void hv_vgicv3_init_redist_registers(void) {
     memset(redistributors, 0, (sizeof(vgicv3_vcpu_redist) * num_cpus));
     for(u16 i = 0; i < num_cpus; i++) {
         bool last_cpu = (i + 1 == num_cpus) ? true : false;
