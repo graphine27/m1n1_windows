@@ -1772,7 +1772,8 @@ class HV(Reloadable):
         #
         hcr.TSC = 1
         hcr.TTLBOS = 1
-        self.u.msr(HCR_EL2, hcr.value)
+        #m1n1_windows change: only set HCR from hv_init()
+        #self.u.msr(HCR_EL2, hcr.value)
 
         # Trap dangerous things
         hacr = HACR(0)

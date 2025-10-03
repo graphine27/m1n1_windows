@@ -269,6 +269,16 @@ static bool hv_handle_msr_unlocked(struct exc_info *ctx, u64 iss)
         SYSREG_PASS(SYS_IMP_APL_PMC7)
         SYSREG_PASS(SYS_IMP_APL_PMC8)
         SYSREG_PASS(SYS_IMP_APL_PMC9)
+        /* m1n1_windows change - advertise GIC */
+        case SYSREG_ISS(ID_AA64PFR0_EL1):
+            if(is_read) {
+                u64 pfr0_value = mrs(ID_AA64PFR0_EL1);
+                regs[rt] = pfr0_value | (0xF << 24);
+            }
+            else{
+                msr(ID_AA64PFR0_EL1, regs[rt]);
+            }
+            return true;
         /* m1n1_windows change - Trap the ARM standard PMU regs */
         case SYSREG_ISS(SYS_PMCR_EL0):
             if(is_read) {

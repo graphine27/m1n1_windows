@@ -174,6 +174,23 @@ void hv_start(void *entry, u64 regs[4])
     hv_secondary_info.sprr_config = mrs(SYS_IMP_APL_SPRR_CONFIG_EL1);
     hv_secondary_info.gxf_config = mrs(SYS_IMP_APL_GXF_CONFIG_EL1);
 
+#ifdef ENABLE_VGIC_MODULE
+    msr(ICH_VMCR_EL2, 0);
+    msr(ICH_VMCR_EL2, (BIT(1)));
+    //bit 0 enables the virtual CPU interface registers
+    //AMO/IMO/FMO set by m1n1 on boot
+    msr(ICH_HCR_EL2, (BIT(0)));
+
+    msr(ICH_LR0_EL2, 0);
+    msr(ICH_LR1_EL2, 0);
+    msr(ICH_LR2_EL2, 0);
+    msr(ICH_LR3_EL2, 0);
+    msr(ICH_LR4_EL2, 0);
+    msr(ICH_LR5_EL2, 0);
+    msr(ICH_LR6_EL2, 0);
+    msr(ICH_LR7_EL2, 0);
+#endif
+
     hv_arm_tick(false);
     hv_pinned_cpu = -1;
     hv_want_cpu = -1;
@@ -237,6 +254,23 @@ static void hv_init_secondary(struct hv_secondary_info_t *info)
     msr(CNTHCTL_EL2, info->cnthctl);
     msr(SYS_IMP_APL_SPRR_CONFIG_EL1, info->sprr_config);
     msr(SYS_IMP_APL_GXF_CONFIG_EL1, info->gxf_config);
+
+#ifdef ENABLE_VGIC_MODULE
+    msr(ICH_VMCR_EL2, 0);
+    msr(ICH_VMCR_EL2, (BIT(1)));
+    //bit 0 enables the virtual CPU interface registers
+    //AMO/IMO/FMO set by m1n1 on boot
+    msr(ICH_HCR_EL2, (BIT(0)));
+
+    msr(ICH_LR0_EL2, 0);
+    msr(ICH_LR1_EL2, 0);
+    msr(ICH_LR2_EL2, 0);
+    msr(ICH_LR3_EL2, 0);
+    msr(ICH_LR4_EL2, 0);
+    msr(ICH_LR5_EL2, 0);
+    msr(ICH_LR6_EL2, 0);
+    msr(ICH_LR7_EL2, 0);
+#endif
 
     if (cpu_features->cyc_ovrd)
         reg_mask(SYS_IMP_APL_CYC_OVRD, CYC_OVRD_WFI_MODE_MASK, CYC_OVRD_WFI_MODE(0));
