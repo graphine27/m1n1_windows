@@ -542,7 +542,7 @@ static bool handle_vgic_dist_access(struct exc_info *ctx, u64 addr, u64 *val, bo
             register_handled = true;
             unimplemented_reg_accessed = true;
         }
-        else {
+        else if(register_handled == false){
             //
             // the register is unknown (or unimplemented) - print a warning.
             //
@@ -558,7 +558,7 @@ static bool handle_vgic_dist_access(struct exc_info *ctx, u64 addr, u64 *val, bo
         //
         switch(relative_addr) {
             case GIC_DIST_CTLR:
-               *val = distributor->gicd_ctl_reg;
+                *val = distributor->gicd_ctl_reg;
                 register_handled = true;
                 break;
             case GIC_DIST_TYPER:
@@ -697,7 +697,7 @@ static bool handle_vgic_dist_access(struct exc_info *ctx, u64 addr, u64 *val, bo
             register_handled = true;
             unimplemented_reg_accessed = true;
         }
-        else {
+        else if (register_handled == false) {
             //
             // the register is unknown (or unimplemented) - print a warning.
             //
@@ -744,11 +744,13 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
     u32 value_is_enabler, value_ic_enabler, current_val;
     u32 irq_num;
     u32 reg_num;
+    u32 reg_offset;
     value_ic_enabler = 0;
     value_is_enabler = 0;
     current_val = 0;
     irq_num = 0;
     reg_num = 0;
+    reg_offset = 0;
 
     cpu_num = ctx->cpu_id;
     if(write) {
@@ -981,6 +983,8 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
                 }
                 redistributors[cpu_num].sgi_region.gicr_isactiver0 = value_is_enabler;
                 redistributors[cpu_num].sgi_region.gicr_icactiver0 = value_ic_enabler;
+                //TODO: should we also write to gicr_isenabler0?
+                redistributors[cpu_num].sgi_region.gicr_isenabler0 = *val;
                 register_handled = true;
                 break;
             case GIC_REDIST_ICENABLER0:
@@ -1139,22 +1143,33 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
                 redistributors[cpu_num].sgi_region.gicr_nsacr = *val;
                 register_handled = true;
                 break;
-            case GIC_REDIST_IPRIORITYR0:
-            case GIC_REDIST_IPRIORITYR1:
-            case GIC_REDIST_IPRIORITYR2:
-            case GIC_REDIST_IPRIORITYR3:
+            case GIC_REDIST_IPRIORITYR0 ... GIC_REDIST_IPRIORITYR3 + 3:
                 // u32 reg_num;
                 reg_num = (relative_addr - GIC_REDIST_IPRIORITYR0) / 4;
-                redistributors[cpu_num].sgi_region.gicr_ppi_ipriority_reg[reg_num] = *val;
+                reg_offset = (relative_addr - GIC_REDIST_IPRIORITYR0) % 4;
+
+                if(reg_offset == 0)
+                    redistributors[cpu_num].sgi_region.gicr_sgi_ipriority_reg[reg_num] = *val;
+                else{
+                    //TODO: handle width
+                    u8 *reg_u8 = (u8 *)&redistributors[cpu_num].sgi_region.gicr_sgi_ipriority_reg[reg_num];
+                    reg_u8 += reg_offset;
+                    *reg_u8 = *val & 0xFF;
+                }
                 register_handled = true;
                 break;
-            case GIC_REDIST_IPRIORITYR4:
-            case GIC_REDIST_IPRIORITYR5:
-            case GIC_REDIST_IPRIORITYR6:
-            case GIC_REDIST_IPRIORITYR7:
+            case GIC_REDIST_IPRIORITYR4 ... GIC_REDIST_IPRIORITYR7 + 3:
                 // u32 reg_num;
                 reg_num = (relative_addr - GIC_REDIST_IPRIORITYR4) / 4;
-                redistributors[cpu_num].sgi_region.gicr_ppi_ipriority_reg[reg_num] = *val;
+                reg_offset = (relative_addr - GIC_REDIST_IPRIORITYR4) % 4;
+                if(reg_offset == 0)
+                    redistributors[cpu_num].sgi_region.gicr_ppi_ipriority_reg[reg_num] = *val;
+                else{
+                    //TODO: handle width
+                    u8 *reg_u8 = (u8 *)&redistributors[cpu_num].sgi_region.gicr_ppi_ipriority_reg[reg_num];
+                    reg_u8 += reg_offset;
+                    *reg_u8 = *val & 0xFF;
+                }
                 register_handled = true;
                 break;
             default:
@@ -1272,22 +1287,33 @@ static bool handle_vgic_redist_access(struct exc_info *ctx, u64 addr, u64 *val, 
                 *val = redistributors[cpu_num].sgi_region.gicr_nsacr;
                 register_handled = true;
                 break;
-            case GIC_REDIST_IPRIORITYR0:
-            case GIC_REDIST_IPRIORITYR1:
-            case GIC_REDIST_IPRIORITYR2:
-            case GIC_REDIST_IPRIORITYR3:
+            case GIC_REDIST_IPRIORITYR0 ... GIC_REDIST_IPRIORITYR3 + 3:
                 // u32 reg_num;
                 reg_num = (relative_addr - GIC_REDIST_IPRIORITYR0) / 4;
-                *val = redistributors[cpu_num].sgi_region.gicr_ppi_ipriority_reg[reg_num];
+                reg_offset = (relative_addr - GIC_REDIST_IPRIORITYR0) % 4;
+
+                if(reg_offset == 0)
+                    *val = redistributors[cpu_num].sgi_region.gicr_sgi_ipriority_reg[reg_num];
+                else{
+                    //TODO: handle width
+                    u8 *reg_u8 = (u8 *)&redistributors[cpu_num].sgi_region.gicr_sgi_ipriority_reg[reg_num];
+                    reg_u8 += reg_offset;
+                    *val = *reg_u8;
+                }
                 register_handled = true;
                 break;
-            case GIC_REDIST_IPRIORITYR4:
-            case GIC_REDIST_IPRIORITYR5:
-            case GIC_REDIST_IPRIORITYR6:
-            case GIC_REDIST_IPRIORITYR7:
+            case GIC_REDIST_IPRIORITYR4 ... GIC_REDIST_IPRIORITYR7 + 3:
                 // u32 reg_num;
                 reg_num = (relative_addr - GIC_REDIST_IPRIORITYR4) / 4;
-                *val = redistributors[cpu_num].sgi_region.gicr_ppi_ipriority_reg[reg_num];
+                reg_offset = (relative_addr - GIC_REDIST_IPRIORITYR4) % 4;
+                if(reg_offset == 0)
+                    redistributors[cpu_num].sgi_region.gicr_ppi_ipriority_reg[reg_num] = *val;
+                else{
+                    //TODO: handle width
+                    u8 *reg_u8 = (u8 *)&redistributors[cpu_num].sgi_region.gicr_ppi_ipriority_reg[reg_num];
+                    reg_u8 += reg_offset;
+                    *val = *reg_u8;
+                }
                 register_handled = true;
                 break;
             default:

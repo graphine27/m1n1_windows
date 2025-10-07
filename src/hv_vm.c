@@ -554,7 +554,8 @@ static bool emulate_load(struct exc_info *ctx, u32 insn, u64 *val, u64 *width, u
     } else if ((insn & 0x3fc00000) == 0x39c00000) {
         // LDRSB (w register)
         DECODE_OK;
-        regs[Rt] = *val;
+        regs[Rt] = (s64)EXT(*val, 8 << *width);
+        regs[Rt] &= 0xffffffff;
     } else if ((insn & 0x3fe04c00) == 0x38604800) {
         // LDRx (register)
         DECODE_OK;
