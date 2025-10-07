@@ -84,12 +84,75 @@
 
 vgicv3_dist *distributor;
 vgicv3_vcpu_redist *redistributors;
-// vgicv3_its *interrupt_translation_service;
+vgicv3_its *interrupt_translation_service;
 static u64 dist_base, redist_base, its_base;
 static u16 num_cpus;
 static bool vgic_inited;
 
 
+static bool handle_vgic_its_access(struct exc_info *ctx, u64 addr, u64 *val, bool write, int width)
+{
+    u64 relative_addr;
+    bool register_handled;
+    bool unimplemented_reg_accessed;
+    u32 reg_num;
+    relative_addr = addr - its_base;
+    register_handled = false;
+    unimplemented_reg_accessed = false;
+    reg_num = 0;
+    if(write) {
+        switch(relative_addr) {
+            case GITS_CTLR:
+                interrupt_translation_service->its_ctl_region.gits_ctl_reg = *val;
+                register_handled = true;
+                break;
+            case GITS_BASER0 ... GITS_BASER7:
+                reg_num = (relative_addr - GITS_BASER0) / 8;
+                interrupt_translation_service->its_ctl_region.gits_baser[reg_num] = *val;
+                register_handled = true;
+                break;
+            default:
+                //
+                // we're dealing with a register that is banked n times, we need to get to the if statements.
+                //
+                break;
+        }
+
+    }
+    else {
+        switch(relative_addr) {
+            case GITS_CTLR:
+                *val = interrupt_translation_service->its_ctl_region.gits_ctl_reg;
+                register_handled = true;
+                break;
+            case GITS_BASER0 ... GITS_BASER7:
+                reg_num = (relative_addr - GITS_BASER0) / 8;
+                *val = interrupt_translation_service->its_ctl_region.gits_baser[reg_num];
+                register_handled = true;
+                break;
+            default:
+                //
+                // we're dealing with a register that is banked n times, we need to get to the if statements.
+                //
+                break;
+        }
+    }
+
+    printf("HV vGIC DEBUG [INFO] [ITS]: 0x%llx = 0x%llx ", relative_addr, *val);
+    if(write) {
+        printf("[Written]");
+    }
+    else {
+        printf("[Read]");
+    }
+    if(unimplemented_reg_accessed) {
+        printf("[Unimplemented]\n");
+    }
+    else {
+        printf("\n");
+    }
+    return register_handled;
+}
 
 
 //
@@ -584,7 +647,9 @@ static bool handle_vgic_dist_access(struct exc_info *ctx, u64 addr, u64 *val, bo
                 *val = 0; // these registers are write only so force return 0 to the guest.
                 register_handled = true;
                 break;
-
+            case 0xffe8: // make Hal happy
+                *val = 0x30;
+                register_handled = true;
             default:
                 //
                 // we're dealing with a register that is banked n times, we need to get to the if statements.
@@ -1627,8 +1692,8 @@ void hv_vgicv3_init(void)
     // ITS setup (for MSIs - PCIe devices usually signal via these.)
     // Disabled for now, seems like direct injection into the guest is easier.
     //
-
-    // hv_map_hook(its_base, handle_vgic_access, sizeof(vgicv3_its));
+    interrupt_translation_service = heapblock_alloc(sizeof(vgicv3_its));
+    hv_map_hook(its_base, handle_vgic_its_access, 0x10000);
 
     //vGIC setup is complete.
     vgic_inited = true;
