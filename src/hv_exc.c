@@ -8,6 +8,8 @@
 #include "string.h"
 #include "uart.h"
 #include "uartproxy.h"
+#include "hv_vgic.h"
+#include "aic.h"
 
 #define TIME_ACCOUNTING
 //
@@ -164,6 +166,10 @@ static void hv_update_fiq(void)
     if (mrs(CNTP_CTL_EL02) == (CNTx_CTL_ISTATUS | CNTx_CTL_ENABLE)) {
         fiq_pending = true;
         reg_clr(SYS_IMP_APL_VM_TMR_FIQ_ENA_EL2, VM_TMR_FIQ_ENA_ENA_P);
+
+        //TODO: proper injection
+        msr(ICH_LR1_EL2, 0x702000000000001e);
+
     } else {
         reg_set(SYS_IMP_APL_VM_TMR_FIQ_ENA_EL2, VM_TMR_FIQ_ENA_ENA_P);
     }
@@ -171,6 +177,14 @@ static void hv_update_fiq(void)
     if (mrs(CNTV_CTL_EL02) == (CNTx_CTL_ISTATUS | CNTx_CTL_ENABLE)) {
         fiq_pending = true;
         reg_clr(SYS_IMP_APL_VM_TMR_FIQ_ENA_EL2, VM_TMR_FIQ_ENA_ENA_V);
+
+        //TODO: proper injection
+        msr(ICH_LR2_EL2, 0x702000000000001b);
+
+        // u64 cntv = mrs(CNTV_CTL_EL02);
+        // cntv |= BIT(0);
+        // cntv &= ~BIT(1);
+        // msr(CNTV_CTL_EL02, cntv);
     } else {
         reg_set(SYS_IMP_APL_VM_TMR_FIQ_ENA_EL2, VM_TMR_FIQ_ENA_ENA_V);
     }
@@ -179,11 +193,11 @@ static void hv_update_fiq(void)
 
     sysop("isb");
 
-    if ((hcr & HCR_VF) && !fiq_pending) {
-        hv_write_hcr(hcr & ~HCR_VF);
-    } else if (!(hcr & HCR_VF) && fiq_pending) {
-        hv_write_hcr(hcr | HCR_VF);
-    }
+    // if ((hcr & HCR_VF) && !fiq_pending) {
+    //     hv_write_hcr(hcr & ~HCR_VF);
+    // } else if (!(hcr & HCR_VF) && fiq_pending) {
+    //     hv_write_hcr(hcr | HCR_VF);
+    // }
 }
 
 #define SYSREG_MAP(sr, to)                                                                         \
