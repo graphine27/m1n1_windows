@@ -158,6 +158,46 @@ void hv_add_time(s64 time)
     stolen_time -= (u64)time;
 }
 
+inline int hv_get_free_lr(void)
+{
+    u64 elrsr = mrs(ICH_ELRSR_EL2);
+    if (!elrsr)
+        return -1;
+    return __builtin_ctzll(elrsr);
+}
+
+void hv_write_lr(u64 val){
+    int lr = hv_get_free_lr();
+    if (lr >= 0) {
+        switch(lr){
+            case 0:
+                msr(ICH_LR0_EL2, val);
+                break;
+            case 1:
+                msr(ICH_LR1_EL2, val);
+                break;
+            case 2:
+                msr(ICH_LR2_EL2, val);
+                break;
+            case 3:
+                msr(ICH_LR3_EL2, val);
+                break;
+            case 4:
+                msr(ICH_LR4_EL2, val);
+                break;
+            case 5:
+                msr(ICH_LR5_EL2, val);
+                break;
+            case 6:
+                msr(ICH_LR6_EL2, val);
+                break;
+            case 7:
+                msr(ICH_LR7_EL2, val);
+                break;
+        }
+    }
+}
+
 static void hv_update_fiq(void)
 {
     u64 hcr = mrs(HCR_EL2);
@@ -168,7 +208,7 @@ static void hv_update_fiq(void)
         reg_clr(SYS_IMP_APL_VM_TMR_FIQ_ENA_EL2, VM_TMR_FIQ_ENA_ENA_P);
 
         //TODO: proper injection
-        msr(ICH_LR1_EL2, 0x702000000000001e);
+        hv_write_lr(0x702000000000001e);
 
     } else {
         reg_set(SYS_IMP_APL_VM_TMR_FIQ_ENA_EL2, VM_TMR_FIQ_ENA_ENA_P);
@@ -179,7 +219,8 @@ static void hv_update_fiq(void)
         reg_clr(SYS_IMP_APL_VM_TMR_FIQ_ENA_EL2, VM_TMR_FIQ_ENA_ENA_V);
 
         //TODO: proper injection
-        msr(ICH_LR2_EL2, 0x702000000000001b);
+        hv_write_lr(0x702000000000001b);
+
 
         // u64 cntv = mrs(CNTV_CTL_EL02);
         // cntv |= BIT(0);
